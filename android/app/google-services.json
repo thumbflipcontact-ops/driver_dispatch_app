@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "23453399326",
+    "project_id": "company-driver-dispatch-e28c1",
+    "storage_bucket": "company-driver-dispatch-e28c1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:23453399326:android:e9fbddc44466dcf814b10f",
+        "android_client_info": {
+          "package_name": "com.example.driver_dispatch_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCw6c4qKbxaru6jNE4TNZDfO1_o4fj2nUc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
