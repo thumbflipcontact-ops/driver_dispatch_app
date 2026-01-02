@@ -7,7 +7,7 @@ class DriverPage extends StatelessWidget {
   const DriverPage({Key? key}) : super(key: key);
 
   final String statusAssigned = "assigné";
-  final String statusStarted  = "démarré";
+  final String statusStarted = "démarré";
   final String statusCompleted = "terminé";
 
   logout(BuildContext context) async {
@@ -61,17 +61,18 @@ class DriverPage extends StatelessWidget {
         ],
       ),
 
-      body: StreamBuilder(
+      body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection("rides")
             .where("assignedDriverId", isEqualTo: uid)
-            .orderBy("pickupDateTimeUtc", descending: true)
-            .snapshots(),
+            .snapshots(),   // ❗ Removed orderBy to prevent Firestore index crash
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
-                child: Text("Erreur de chargement des courses",
-                    style: TextStyle(color: Colors.red)));
+                child: Text(
+              "Erreur de chargement des courses",
+              style: TextStyle(color: Colors.red),
+            ));
           }
 
           if (!snapshot.hasData) {
@@ -84,21 +85,19 @@ class DriverPage extends StatelessWidget {
             return const Center(child: Text("Aucune course trouvée."));
           }
 
-          /// Split Active vs History
           final activeRides = rides.where((r) {
             return r["status"] != statusCompleted;
           }).toList();
 
           final historyRides = rides.where((r) {
-            return r["status"] == statusCompleted || r["status"] == statusStarted;
+            return r["status"] == statusCompleted ||
+                r["status"] == statusStarted;
           }).toList();
 
           return SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                // ---------------- ACTIVE RIDES ----------------
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
@@ -113,15 +112,14 @@ class DriverPage extends StatelessWidget {
                 if (activeRides.isEmpty)
                   const Center(
                       child: Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Text("Aucune course active."),
-                      )),
+                    padding: EdgeInsets.all(10),
+                    child: Text("Aucune course active."),
+                  )),
 
                 ...activeRides.map((ride) => _activeRideCard(context, ride)),
 
                 const SizedBox(height: 20),
 
-                // ---------------- HISTORY ----------------
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
@@ -136,9 +134,9 @@ class DriverPage extends StatelessWidget {
                 if (historyRides.isEmpty)
                   const Center(
                       child: Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Text("Aucun historique disponible."),
-                      )),
+                    padding: EdgeInsets.all(10),
+                    child: Text("Aucun historique disponible."),
+                  )),
 
                 ...historyRides.map((ride) => _historyCard(ride)),
               ],
@@ -149,14 +147,11 @@ class DriverPage extends StatelessWidget {
     );
   }
 
-  /// ================= ACTIVE CARD =================
   Widget _activeRideCard(BuildContext context, DocumentSnapshot ride) {
     final data = ride.data() as Map<String, dynamic>;
 
     final pickupDisplay = data["pickupDateTimeText"] ?? "Non défini";
-
-    final finishDisplay =
-        data["finishTimeText"] ?? "Non terminé";
+    final finishDisplay = data["finishTimeText"] ?? "Non terminé";
 
     DateTime? pickupTime;
     if (data["pickupDateTimeUtc"] is Timestamp) {
@@ -237,7 +232,6 @@ class DriverPage extends StatelessWidget {
     );
   }
 
-  /// ================= HISTORY CARD =================
   Widget _historyCard(DocumentSnapshot ride) {
     final data = ride.data() as Map<String, dynamic>;
 
