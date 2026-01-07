@@ -30,7 +30,7 @@ class _AdminPageState extends State<AdminPage> {
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
-  /// 📅 Select Date + Time (France Locale UI)
+  /// 📅 Select Date + Time
   selectDateTime() async {
     final selectedDate = await showDatePicker(
       context: context,
@@ -78,27 +78,16 @@ class _AdminPageState extends State<AdminPage> {
 
     FirebaseFirestore.instance.collection("rides").add({
       "assignedDriverId": selectedDriver,
-
-      /// Date & Time
       "pickupDateTimeUtc": pickupDateTime,
       "pickupDateTimeText": frFormatted,
-
-      /// Rider Info
       "passengerName": passenger.text.trim(),
       "passengerPhone": phone.text.trim(),
-
-      /// Locations
       "pickupLocation": pickup.text.trim(),
       "dropLocation": drop.text.trim(),
-
-      /// Flight & People
       "flightNumber": flight.text.trim(),
       "personsCount": persons.text.trim(),
       "bagsCount": bags.text.trim(),
-
-      /// Optional Notes
       "otherNotes": others.text.trim(),
-
       "status": "assigné"
     });
 
@@ -119,6 +108,29 @@ class _AdminPageState extends State<AdminPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Course assignée avec succès")),
     );
+  }
+
+  /// ❌ Delete Driver
+  Future<void> deleteDriver(String driverId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(driverId)
+          .delete();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Chauffeur supprimé avec succès")),
+      );
+
+      // If deleted driver was selected in dropdown, reset it
+      if (selectedDriver == driverId) {
+        setState(() => selectedDriver = null);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur suppression chauffeur: $e")),
+      );
+    }
   }
 
   @override
@@ -150,7 +162,7 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 25),
 
-                /// 1️⃣ DATE TIME
+                /// DATE TIME
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
@@ -175,7 +187,6 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 20),
 
-                /// 2️⃣ CLIENT NAME
                 TextFormField(
                   controller: passenger,
                   decoration: const InputDecoration(
@@ -183,7 +194,6 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
-                /// 3️⃣ PHONE
                 TextFormField(
                   controller: phone,
                   keyboardType: TextInputType.phone,
@@ -192,7 +202,6 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
-                /// 4️⃣ PICKUP
                 TextFormField(
                   controller: pickup,
                   decoration:
@@ -200,7 +209,6 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
-                /// 5️⃣ DROP
                 TextFormField(
                   controller: drop,
                   decoration:
@@ -208,7 +216,6 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
-                /// 6️⃣ FLIGHT
                 TextFormField(
                   controller: flight,
                   decoration:
@@ -216,7 +223,6 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
-                /// 7️⃣ PERSONS
                 TextFormField(
                   controller: persons,
                   keyboardType: TextInputType.number,
@@ -225,7 +231,6 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
-                /// 8️⃣ BAGS
                 TextFormField(
                   controller: bags,
                   keyboardType: TextInputType.number,
@@ -234,7 +239,6 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
-                /// 9️⃣ NOTES (optional)
                 TextFormField(
                   controller: others,
                   decoration: const InputDecoration(labelText: "Autres"),
@@ -242,7 +246,7 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 25),
 
-                /// DRIVER SELECT
+                /// DRIVER DROPDOWN
                 StreamBuilder(
                   stream: FirebaseFirestore.instance
                       .collection("users")
@@ -283,6 +287,72 @@ class _AdminPageState extends State<AdminPage> {
                     onPressed: assignRide,
                     child: const Text("Assigner la course"),
                   ),
+                ),
+
+                const SizedBox(height: 40),
+
+                /// ================================
+                /// 👤 DRIVER MANAGEMENT SECTION
+                /// ================================
+                const Text(
+                  "Gérer les chauffeurs",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 10),
+
+                StreamBuilder(
+                  stream: FirebaseFirestore.instance
+                      .collection("users")
+                      .where("role", isEqualTo: "driver")
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Text("Chargement...");
+                    }
+
+                    var drivers = snapshot.data!.docs;
+
+                    if (drivers.isEmpty) {
+                      return const Text("Aucun chauffeur trouvé");
+                    }
+
+                    return Column(
+                      children: drivers.map((d) {
+                        return Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.person),
+                            title: Text(d["name"]),
+                            subtitle: Text(d["email"] ?? ""),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text("Supprimer le chauffeur ?"),
+                                    content: Text("Êtes-vous sûr de vouloir supprimer ${d["name"]} ?"),
+                                    actions: [
+                                      TextButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          child: const Text("Annuler")),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          deleteDriver(d.id);
+                                        },
+                                        child: const Text("Supprimer"),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
                 ),
               ],
             ),
