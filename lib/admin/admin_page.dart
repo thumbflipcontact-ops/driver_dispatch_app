@@ -25,65 +25,58 @@ class _AdminPageState extends State<AdminPage> {
 
   DateTime? pickupDateTime;
 
-  /// Search + Sorting
-  final TextEditingController searchController = TextEditingController();
+  final searchController = TextEditingController();
   bool sortAscending = true;
 
-  logout(BuildContext context) async {
+  logout() async {
     await FirebaseAuth.instance.signOut();
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
-  /// 📅 Select Date + Time
+  Stream<QuerySnapshot> driverStream() {
+    return FirebaseFirestore.instance
+        .collection("users")
+        .where("role", isEqualTo: "driver")
+        .snapshots();
+  }
+
   selectDateTime() async {
-    final selectedDate = await showDatePicker(
+    final d = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime(2100),
-      helpText: "Sélectionner la date de prise en charge",
-      locale: const Locale('fr', 'FR'),
+      locale: const Locale("fr", "FR"),
     );
 
-    if (selectedDate == null) return;
+    if (d == null) return;
 
-    final selectedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-      helpText: "Sélectionner l’heure de prise en charge",
-    );
+    final t = await showTimePicker(
+        context: context, initialTime: TimeOfDay.now());
 
-    if (selectedTime == null) return;
+    if (t == null) return;
 
-    final dt = DateTime(
-      selectedDate.year,
-      selectedDate.month,
-      selectedDate.day,
-      selectedTime.hour,
-      selectedTime.minute,
-    );
-
-    setState(() => pickupDateTime = dt);
+    setState(() {
+      pickupDateTime =
+          DateTime(d.year, d.month, d.day, t.hour, t.minute);
+    });
   }
 
-  /// 🚕 Assign Ride
-  assignRide() {
+  assignRide() async {
     if (!formKey.currentState!.validate() ||
         selectedDriver == null ||
         pickupDateTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Veuillez remplir tous les champs obligatoires")),
+        const SnackBar(content: Text("Veuillez remplir tout")),
       );
       return;
     }
 
-    final frFormatted =
-        DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(pickupDateTime!);
-
-    FirebaseFirestore.instance.collection("rides").add({
+    await FirebaseFirestore.instance.collection("rides").add({
       "assignedDriverId": selectedDriver,
       "pickupDateTimeUtc": pickupDateTime,
-      "pickupDateTimeText": frFormatted,
+      "pickupDateTimeText":
+          DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(pickupDateTime!),
       "passengerName": passenger.text.trim(),
       "passengerPhone": phone.text.trim(),
       "pickupLocation": pickup.text.trim(),
@@ -95,6 +88,8 @@ class _AdminPageState extends State<AdminPage> {
       "status": "assigné"
     });
 
+    selectedDriver = null;
+    pickupDateTime = null;
     passenger.clear();
     phone.clear();
     pickup.clear();
@@ -104,36 +99,16 @@ class _AdminPageState extends State<AdminPage> {
     bags.clear();
     others.clear();
 
-    setState(() {
-      selectedDriver = null;
-      pickupDateTime = null;
-    });
+    setState(() {});
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Course assignée avec succès")),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Assigné")));
   }
 
-  /// ❌ Delete Driver
-  Future<void> deleteDriver(String driverId) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection("users")
-          .doc(driverId)
-          .delete();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Chauffeur supprimé avec succès")),
-      );
-
-      if (selectedDriver == driverId) {
-        setState(() => selectedDriver = null);
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur suppression chauffeur: $e")),
-      );
-    }
+  Future<void> deleteDriver(String id) async {
+    await FirebaseFirestore.instance.collection("users").doc(id).delete();
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Chauffeur supprimé")));
   }
 
   @override
@@ -143,10 +118,7 @@ class _AdminPageState extends State<AdminPage> {
         title: const Text("Panneau Dispatcheur"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: "Se déconnecter",
-            onPressed: () => logout(context),
-          )
+              onPressed: logout, icon: const Icon(Icons.logout))
         ],
       ),
 
@@ -158,253 +130,122 @@ class _AdminPageState extends State<AdminPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "Créer une nouvelle course",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
 
-                const SizedBox(height: 25),
-
-                /// DATE TIME SELECTOR
+                /// ---------------- CREATE RIDE ----------------
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
                     decoration: const InputDecoration(
-                      labelText: "Date et heure de prise en charge",
-                      border: UnderlineInputBorder(),
-                    ),
+                        labelText: "Date & Heure"),
                     child: Text(
                       pickupDateTime == null
-                          ? "Sélectionner la date et l’heure"
+                          ? "Sélectionner"
                           : DateFormat("dd/MM/yyyy HH:mm", "fr_FR")
                               .format(pickupDateTime!),
-                      style: TextStyle(
-                        color: pickupDateTime == null
-                            ? Colors.grey
-                            : Colors.black,
-                        fontSize: 16,
-                      ),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 20),
-
                 TextFormField(
                   controller: passenger,
-                  decoration: const InputDecoration(labelText: "Nom du client"),
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  validator: (v) => v!.isEmpty ? "obligatoire" : null,
+                  decoration:
+                      const InputDecoration(labelText: "Client"),
                 ),
 
                 TextFormField(
                   controller: phone,
-                  keyboardType: TextInputType.phone,
-                  decoration:
-                      const InputDecoration(labelText: "Téléphone du client"),
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  validator: (v) => v!.isEmpty ? "obligatoire" : null,
+                  decoration: const InputDecoration(labelText: "Téléphone"),
                 ),
 
-                TextFormField(
-                  controller: pickup,
-                  decoration:
-                      const InputDecoration(labelText: "Adresse départ"),
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
-                ),
+                const SizedBox(height: 10),
 
-                TextFormField(
-                  controller: drop,
-                  decoration:
-                      const InputDecoration(labelText: "Adresse destination"),
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
-                ),
-
-                TextFormField(
-                  controller: flight,
-                  decoration:
-                      const InputDecoration(labelText: "Numéro de vol"),
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
-                ),
-
-                TextFormField(
-                  controller: persons,
-                  keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: "Nombre de personnes"),
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
-                ),
-
-                TextFormField(
-                  controller: bags,
-                  keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: "Nombre de bagages"),
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
-                ),
-
-                TextFormField(
-                  controller: others,
-                  decoration: const InputDecoration(labelText: "Autres"),
-                ),
-
-                const SizedBox(height: 25),
-
-                /// DRIVER DROPDOWN
+                /// ---------------- DRIVER DROPDOWN ----------------
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection("users")
-                      .where("role", isEqualTo: "driver")
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Text("Chargement des chauffeurs...");
-                    }
-
-                    var drivers = snapshot.data!.docs;
+                  stream: driverStream(),
+                  builder: (context, s) {
+                    if (!s.hasData) return const Text("Chargement...");
+                    final drivers = s.data!.docs;
+                    if (drivers.isEmpty) return const Text("Aucun chauffeur");
 
                     return DropdownButtonFormField(
                       value: selectedDriver,
-                      isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: "Sélectionner un chauffeur",
-                      ),
+                          labelText: "Sélectionner un chauffeur"),
                       items: drivers.map((d) {
+                        final name = (d["name"] ?? "Sans nom").toString();
                         return DropdownMenuItem(
-                          value: d.id,
-                          child: Text(d["name"] ?? "Sans nom"),
-                        );
+                            value: d.id, child: Text(name));
                       }).toList(),
-                      onChanged: (value) {
-                        setState(() => selectedDriver = value);
-                      },
-                      validator: (value) =>
-                          value == null ? "Sélection obligatoire" : null,
+                      onChanged: (v) => setState(() {
+                        selectedDriver = v;
+                      }),
+                      validator: (v) =>
+                          v == null ? "Obligatoire" : null,
                     );
                   },
                 ),
 
-                const SizedBox(height: 25),
+                const SizedBox(height: 20),
 
                 Center(
                   child: ElevatedButton(
-                    onPressed: assignRide,
-                    child: const Text("Assigner la course"),
-                  ),
+                      onPressed: assignRide,
+                      child: const Text("Assigner la course")),
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
 
-                /// ================================
-                /// 👤 DRIVER MANAGEMENT SECTION
-                /// ================================
-                const Text(
-                  "Gérer les chauffeurs",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-
+                /// ---------------- DRIVER MANAGEMENT ----------------
+                const Text("Gérer les chauffeurs",
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
 
-                /// 🔍 SEARCH BAR
                 TextField(
                   controller: searchController,
-                  decoration: InputDecoration(
-                    labelText: "Rechercher un chauffeur",
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              searchController.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (value) => setState(() {}),
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      labelText: "Rechercher"),
                 ),
 
                 const SizedBox(height: 10),
 
-                /// SORT BUTTON
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(sortAscending ? "Tri: A → Z" : "Tri: Z → A"),
-                    IconButton(
-                      icon: Icon(
-                        sortAscending
-                            ? Icons.arrow_downward
-                            : Icons.arrow_upward,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          sortAscending = !sortAscending;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-
-                /// DRIVER LIST
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection("users")
-                      .where("role", isEqualTo: "driver")
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(
-                          child: CircularProgressIndicator());
-                    }
+                  stream: driverStream(),
+                  builder: (context, s) {
+                    if (!s.hasData) return const CircularProgressIndicator();
 
-                    if (!snapshot.hasData ||
-                        snapshot.data!.docs.isEmpty) {
-                      return const Text("Aucun chauffeur trouvé");
-                    }
+                    List docs = s.data!.docs;
 
-                    /// Convert docs to mutable list
-                    List<QueryDocumentSnapshot> drivers =
-                        snapshot.data!.docs.toList();
-
-                    /// APPLY SEARCH FILTER
+                    /// filter
                     if (searchController.text.isNotEmpty) {
-                      final keyword =
+                      final key =
                           searchController.text.toLowerCase().trim();
-                      drivers = drivers.where((d) {
+                      docs = docs.where((d) {
                         final name =
                             (d["name"] ?? "").toString().toLowerCase();
-                        final email =
-                            (d["email"] ?? "").toString().toLowerCase();
-                        return name.contains(keyword) ||
-                            email.contains(keyword);
+                        return name.contains(key);
                       }).toList();
                     }
 
-                    /// APPLY SORTING
-                    drivers.sort((a, b) {
-                      final nameA = (a["name"] ?? "").toString();
-                      final nameB = (b["name"] ?? "").toString();
-                      return sortAscending
-                          ? nameA.compareTo(nameB)
-                          : nameB.compareTo(nameA);
-                    });
-
-                    if (drivers.isEmpty) {
-                      return const Text("Aucun résultat");
+                    if (docs.isEmpty) {
+                      return const Text("Aucun chauffeur trouvé");
                     }
 
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: drivers.length,
-                      itemBuilder: (context, index) {
-                        final d = drivers[index];
+                    /// THIS IS THE FIX:
+                    /// Column instead of ListView (no grey ever)
+                    return Column(
+                      children: docs.map<Widget>((d) {
+                        final name =
+                            (d["name"] ?? "Sans nom").toString();
 
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.person),
-                            title: Text(d["name"] ?? "Sans nom"),
-                            subtitle: Text(d["email"] ?? ""),
+                            title: Text(name),
                             trailing: IconButton(
                               icon: const Icon(Icons.delete,
                                   color: Colors.red),
@@ -412,23 +253,21 @@ class _AdminPageState extends State<AdminPage> {
                                 showDialog(
                                   context: context,
                                   builder: (_) => AlertDialog(
-                                    title: const Text(
-                                        "Supprimer le chauffeur ?"),
-                                    content: Text(
-                                        "Êtes-vous sûr de vouloir supprimer ${d["name"] ?? "ce chauffeur"} ?"),
+                                    title: const Text("Supprimer ?"),
+                                    content:
+                                        Text("Supprimer $name ?"),
                                     actions: [
                                       TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context),
-                                        child: const Text("Annuler"),
-                                      ),
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                          child: const Text("Annuler")),
                                       TextButton(
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                          deleteDriver(d.id);
-                                        },
-                                        child: const Text("Supprimer"),
-                                      ),
+                                          onPressed: () {
+                                            Navigator.pop(context);
+                                            deleteDriver(d.id);
+                                          },
+                                          child:
+                                              const Text("Supprimer")),
                                     ],
                                   ),
                                 );
@@ -436,10 +275,10 @@ class _AdminPageState extends State<AdminPage> {
                             ),
                           ),
                         );
-                      },
+                      }).toList(),
                     );
                   },
-                ),
+                )
               ],
             ),
           ),
