@@ -25,6 +25,10 @@ class _AdminPageState extends State<AdminPage> {
 
   DateTime? pickupDateTime;
 
+  /// Search + Sorting
+  final TextEditingController searchController = TextEditingController();
+  bool sortAscending = true;
+
   logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     Navigator.popUntil(context, (route) => route.isFirst);
@@ -122,7 +126,6 @@ class _AdminPageState extends State<AdminPage> {
         const SnackBar(content: Text("Chauffeur supprimé avec succès")),
       );
 
-      // If deleted driver was selected in dropdown, reset it
       if (selectedDriver == driverId) {
         setState(() => selectedDriver = null);
       }
@@ -162,7 +165,7 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 25),
 
-                /// DATE TIME
+                /// DATE TIME SELECTOR
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
@@ -189,16 +192,15 @@ class _AdminPageState extends State<AdminPage> {
 
                 TextFormField(
                   controller: passenger,
-                  decoration: const InputDecoration(
-                      labelText: "Nom du client"),
+                  decoration: const InputDecoration(labelText: "Nom du client"),
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
                 TextFormField(
                   controller: phone,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                      labelText: "Téléphone du client"),
+                  decoration:
+                      const InputDecoration(labelText: "Téléphone du client"),
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
                 ),
 
@@ -247,7 +249,7 @@ class _AdminPageState extends State<AdminPage> {
                 const SizedBox(height: 25),
 
                 /// DRIVER DROPDOWN
-                StreamBuilder(
+                StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection("users")
                       .where("role", isEqualTo: "driver")
@@ -268,7 +270,7 @@ class _AdminPageState extends State<AdminPage> {
                       items: drivers.map((d) {
                         return DropdownMenuItem(
                           value: d.id,
-                          child: Text(d["name"]),
+                          child: Text(d["name"] ?? "Sans nom"),
                         );
                       }).toList(),
                       onChanged: (value) {
@@ -301,41 +303,125 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 10),
 
-                StreamBuilder(
+                /// 🔍 SEARCH BAR
+                TextField(
+                  controller: searchController,
+                  decoration: InputDecoration(
+                    labelText: "Rechercher un chauffeur",
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              searchController.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (value) => setState(() {}),
+                ),
+
+                const SizedBox(height: 10),
+
+                /// SORT BUTTON
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(sortAscending ? "Tri: A → Z" : "Tri: Z → A"),
+                    IconButton(
+                      icon: Icon(
+                        sortAscending
+                            ? Icons.arrow_downward
+                            : Icons.arrow_upward,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          sortAscending = !sortAscending;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+
+                /// DRIVER LIST
+                StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection("users")
                       .where("role", isEqualTo: "driver")
                       .snapshots(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Text("Chargement...");
+                    if (snapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(
+                          child: CircularProgressIndicator());
                     }
 
-                    var drivers = snapshot.data!.docs;
-
-                    if (drivers.isEmpty) {
+                    if (!snapshot.hasData ||
+                        snapshot.data!.docs.isEmpty) {
                       return const Text("Aucun chauffeur trouvé");
                     }
 
-                    return Column(
-                      children: drivers.map((d) {
+                    /// Convert docs to mutable list
+                    List<QueryDocumentSnapshot> drivers =
+                        snapshot.data!.docs.toList();
+
+                    /// APPLY SEARCH FILTER
+                    if (searchController.text.isNotEmpty) {
+                      final keyword =
+                          searchController.text.toLowerCase().trim();
+                      drivers = drivers.where((d) {
+                        final name =
+                            (d["name"] ?? "").toString().toLowerCase();
+                        final email =
+                            (d["email"] ?? "").toString().toLowerCase();
+                        return name.contains(keyword) ||
+                            email.contains(keyword);
+                      }).toList();
+                    }
+
+                    /// APPLY SORTING
+                    drivers.sort((a, b) {
+                      final nameA = (a["name"] ?? "").toString();
+                      final nameB = (b["name"] ?? "").toString();
+                      return sortAscending
+                          ? nameA.compareTo(nameB)
+                          : nameB.compareTo(nameA);
+                    });
+
+                    if (drivers.isEmpty) {
+                      return const Text("Aucun résultat");
+                    }
+
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: drivers.length,
+                      itemBuilder: (context, index) {
+                        final d = drivers[index];
+
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.person),
-                            title: Text(d["name"]),
+                            title: Text(d["name"] ?? "Sans nom"),
                             subtitle: Text(d["email"] ?? ""),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.red),
                               onPressed: () {
                                 showDialog(
                                   context: context,
                                   builder: (_) => AlertDialog(
-                                    title: const Text("Supprimer le chauffeur ?"),
-                                    content: Text("Êtes-vous sûr de vouloir supprimer ${d["name"]} ?"),
+                                    title: const Text(
+                                        "Supprimer le chauffeur ?"),
+                                    content: Text(
+                                        "Êtes-vous sûr de vouloir supprimer ${d["name"] ?? "ce chauffeur"} ?"),
                                     actions: [
                                       TextButton(
-                                          onPressed: () => Navigator.pop(context),
-                                          child: const Text("Annuler")),
+                                        onPressed: () =>
+                                            Navigator.pop(context),
+                                        child: const Text("Annuler"),
+                                      ),
                                       TextButton(
                                         onPressed: () {
                                           Navigator.pop(context);
@@ -350,7 +436,7 @@ class _AdminPageState extends State<AdminPage> {
                             ),
                           ),
                         );
-                      }).toList(),
+                      },
                     );
                   },
                 ),
