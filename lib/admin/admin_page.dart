@@ -22,11 +22,9 @@ class _AdminPageState extends State<AdminPage> {
 
   String? selectedDriver;
   final formKey = GlobalKey<FormState>();
-
   DateTime? pickupDateTime;
 
   final searchController = TextEditingController();
-  bool sortAscending = true;
 
   logout() async {
     await FirebaseAuth.instance.signOut();
@@ -48,17 +46,14 @@ class _AdminPageState extends State<AdminPage> {
       lastDate: DateTime(2100),
       locale: const Locale("fr", "FR"),
     );
-
     if (d == null) return;
 
-    final t = await showTimePicker(
-        context: context, initialTime: TimeOfDay.now());
-
+    final t =
+        await showTimePicker(context: context, initialTime: TimeOfDay.now());
     if (t == null) return;
 
     setState(() {
-      pickupDateTime =
-          DateTime(d.year, d.month, d.day, t.hour, t.minute);
+      pickupDateTime = DateTime(d.year, d.month, d.day, t.hour, t.minute);
     });
   }
 
@@ -67,7 +62,7 @@ class _AdminPageState extends State<AdminPage> {
         selectedDriver == null ||
         pickupDateTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Veuillez remplir tout")),
+        const SnackBar(content: Text("Veuillez remplir tous les champs")),
       );
       return;
     }
@@ -88,8 +83,6 @@ class _AdminPageState extends State<AdminPage> {
       "status": "assigné"
     });
 
-    selectedDriver = null;
-    pickupDateTime = null;
     passenger.clear();
     phone.clear();
     pickup.clear();
@@ -98,11 +91,13 @@ class _AdminPageState extends State<AdminPage> {
     persons.clear();
     bags.clear();
     others.clear();
+    selectedDriver = null;
+    pickupDateTime = null;
 
     setState(() {});
 
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Assigné")));
+        .showSnackBar(const SnackBar(content: Text("Course assignée")));
   }
 
   Future<void> deleteDriver(String id) async {
@@ -117,8 +112,7 @@ class _AdminPageState extends State<AdminPage> {
       appBar: AppBar(
         title: const Text("Panneau Dispatcheur"),
         actions: [
-          IconButton(
-              onPressed: logout, icon: const Icon(Icons.logout))
+          IconButton(onPressed: logout, icon: const Icon(Icons.logout))
         ],
       ),
 
@@ -131,12 +125,12 @@ class _AdminPageState extends State<AdminPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                /// ---------------- CREATE RIDE ----------------
+                // ---------------- DATE ----------------
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
-                    decoration: const InputDecoration(
-                        labelText: "Date & Heure"),
+                    decoration:
+                        const InputDecoration(labelText: "Date & Heure"),
                     child: Text(
                       pickupDateTime == null
                           ? "Sélectionner"
@@ -146,22 +140,64 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                 ),
 
+                // ---------------- CLIENT DETAILS ----------------
                 TextFormField(
                   controller: passenger,
-                  validator: (v) => v!.isEmpty ? "obligatoire" : null,
-                  decoration:
-                      const InputDecoration(labelText: "Client"),
+                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  decoration: const InputDecoration(labelText: "Client"),
                 ),
 
                 TextFormField(
                   controller: phone,
-                  validator: (v) => v!.isEmpty ? "obligatoire" : null,
-                  decoration: const InputDecoration(labelText: "Téléphone"),
+                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  decoration:
+                      const InputDecoration(labelText: "Téléphone"),
+                ),
+
+                // ---------------- PICKUP / DROP ----------------
+                TextFormField(
+                  controller: pickup,
+                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  decoration:
+                      const InputDecoration(labelText: "Adresse départ"),
+                ),
+
+                TextFormField(
+                  controller: drop,
+                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  decoration: const InputDecoration(
+                      labelText: "Adresse destination"),
+                ),
+
+                // ---------------- EXTRA FIELDS ----------------
+                TextFormField(
+                  controller: flight,
+                  decoration:
+                      const InputDecoration(labelText: "Numéro de vol"),
+                ),
+
+                TextFormField(
+                  controller: persons,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: "Nombre de personnes"),
+                ),
+
+                TextFormField(
+                  controller: bags,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: "Nombre de bagages"),
+                ),
+
+                TextFormField(
+                  controller: others,
+                  decoration: const InputDecoration(labelText: "Autres"),
                 ),
 
                 const SizedBox(height: 10),
 
-                /// ---------------- DRIVER DROPDOWN ----------------
+                // ---------------- DRIVER DROPDOWN ----------------
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
@@ -174,7 +210,8 @@ class _AdminPageState extends State<AdminPage> {
                       decoration: const InputDecoration(
                           labelText: "Sélectionner un chauffeur"),
                       items: drivers.map((d) {
-                        final name = (d["name"] ?? "Sans nom").toString();
+                        final name =
+                            (d["name"] ?? "Sans nom").toString();
                         return DropdownMenuItem(
                             value: d.id, child: Text(name));
                       }).toList(),
@@ -197,10 +234,11 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 30),
 
-                /// ---------------- DRIVER MANAGEMENT ----------------
+                // ---------------- DRIVER MANAGEMENT ----------------
                 const Text("Gérer les chauffeurs",
                     style: TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
+
                 const SizedBox(height: 10),
 
                 TextField(
@@ -216,11 +254,11 @@ class _AdminPageState extends State<AdminPage> {
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
-                    if (!s.hasData) return const CircularProgressIndicator();
+                    if (!s.hasData)
+                      return const CircularProgressIndicator();
 
                     List docs = s.data!.docs;
 
-                    /// filter
                     if (searchController.text.isNotEmpty) {
                       final key =
                           searchController.text.toLowerCase().trim();
@@ -235,8 +273,6 @@ class _AdminPageState extends State<AdminPage> {
                       return const Text("Aucun chauffeur trouvé");
                     }
 
-                    /// THIS IS THE FIX:
-                    /// Column instead of ListView (no grey ever)
                     return Column(
                       children: docs.map<Widget>((d) {
                         final name =
@@ -260,7 +296,8 @@ class _AdminPageState extends State<AdminPage> {
                                       TextButton(
                                           onPressed: () =>
                                               Navigator.pop(context),
-                                          child: const Text("Annuler")),
+                                          child:
+                                              const Text("Annuler")),
                                       TextButton(
                                           onPressed: () {
                                             Navigator.pop(context);
