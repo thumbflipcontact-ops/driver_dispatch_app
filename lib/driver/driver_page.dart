@@ -9,16 +9,34 @@ class DriverPage extends StatelessWidget {
   final String statusAssigned = "assigné";
   final String statusStarted = "démarré";
   final String statusCompleted = "terminé";
+  final String statusUnassigned = "non assigné";
 
   logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
-  startRide(DocumentSnapshot ride) async {
-    final now = DateTime.now();
-    final frFormatted =
-        DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now);
+  /// 🚫 Cannot start if pickup time is in the future
+  startRide(BuildContext context, DocumentSnapshot ride) async {
+    final data = ride.data() as Map<String, dynamic>;
+
+    DateTime now = DateTime.now();
+    DateTime? pickupTime;
+
+    if (data["pickupDateTimeUtc"] is Timestamp) {
+      pickupTime =
+          (data["pickupDateTimeUtc"] as Timestamp).toDate();
+    }
+
+    if (pickupTime != null && pickupTime.isAfter(now)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              "Vous pouvez démarrer uniquement à l’heure de prise en charge"),
+        ),
+      );
+      return;
+    }
 
     await FirebaseFirestore.instance
         .collection("rides")
@@ -26,14 +44,13 @@ class DriverPage extends StatelessWidget {
         .update({
       "status": statusStarted,
       "startTimeUtc": now,
-      "startTimeText": frFormatted
+      "startTimeText":
+          DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now),
     });
   }
 
   finishRide(DocumentSnapshot ride) async {
     final now = DateTime.now();
-    final frFormatted =
-        DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now);
 
     await FirebaseFirestore.instance
         .collection("rides")
@@ -41,13 +58,41 @@ class DriverPage extends StatelessWidget {
         .update({
       "status": statusCompleted,
       "finishTimeUtc": now,
-      "finishTimeText": frFormatted
+      "finishTimeText":
+          DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now),
     });
+  }
+
+  /// ❌ Prevent unassign if ride already started
+  unassignRide(BuildContext context, DocumentSnapshot ride) async {
+    final data = ride.data() as Map<String, dynamic>;
+
+    if (data["status"] != statusAssigned) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text("Impossible de supprimer une course déjà démarrée"),
+        ),
+      );
+      return;
+    }
+
+    await FirebaseFirestore.instance
+        .collection("rides")
+        .doc(ride.id)
+        .update({
+      "assignedDriverId": null,
+      "status": statusUnassigned,
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Course retirée")),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    String uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
       appBar: AppBar(
@@ -55,88 +100,89 @@ class DriverPage extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: "Se déconnecter",
             onPressed: () => logout(context),
           )
         ],
       ),
-
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection("rides")
             .where("assignedDriverId", isEqualTo: uid)
-            .snapshots(),   // ❗ Removed orderBy to prevent Firestore index crash
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
-                child: Text(
-              "Erreur de chargement des courses",
-              style: TextStyle(color: Colors.red),
-            ));
+                child: Text("Aucune course assignée."));
           }
 
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          var rides = snapshot.data!.docs;
+          List<DocumentSnapshot> rides = snapshot.data!.docs;
 
           if (rides.isEmpty) {
-            return const Center(child: Text("Aucune course trouvée."));
+            return const Center(
+                child: Text("Aucune course assignée."));
           }
 
-          final activeRides = rides.where((r) {
-            return r["status"] != statusCompleted;
-          }).toList();
+          /// ✅ Sort locally by pickup time (ascending)
+          rides.sort((a, b) {
+            final aTime = a["pickupDateTimeUtc"];
+            final bTime = b["pickupDateTimeUtc"];
 
-          final historyRides = rides.where((r) {
-            return r["status"] == statusCompleted ||
-                r["status"] == statusStarted;
-          }).toList();
+            if (aTime == null && bTime == null) return 0;
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+
+            return (aTime as Timestamp)
+                .toDate()
+                .compareTo((bTime as Timestamp).toDate());
+          });
+
+          final activeRides =
+              rides.where((r) => r["status"] != statusCompleted).toList();
+
+          final historyRides =
+              rides.where((r) => r["status"] == statusCompleted).toList();
 
           return SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(12),
+
+                const Padding(
+                  padding: EdgeInsets.all(12),
                   child: Text(
                     "Courses Actives",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700),
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
 
                 if (activeRides.isEmpty)
-                  const Center(
-                      child: Padding(
+                  const Padding(
                     padding: EdgeInsets.all(10),
                     child: Text("Aucune course active."),
-                  )),
+                  ),
 
-                ...activeRides.map((ride) => _activeRideCard(context, ride)),
+                ...activeRides.map(
+                    (ride) => _activeRideCard(context, ride)),
 
-                const SizedBox(height: 20),
-
-                Padding(
-                  padding: const EdgeInsets.all(12),
+                const Padding(
+                  padding: EdgeInsets.all(12),
                   child: Text(
                     "Historique des courses",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade700),
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
 
                 if (historyRides.isEmpty)
-                  const Center(
-                      child: Padding(
+                  const Padding(
                     padding: EdgeInsets.all(10),
                     child: Text("Aucun historique disponible."),
-                  )),
+                  ),
 
                 ...historyRides.map((ride) => _historyCard(ride)),
               ],
@@ -150,26 +196,19 @@ class DriverPage extends StatelessWidget {
   Widget _activeRideCard(BuildContext context, DocumentSnapshot ride) {
     final data = ride.data() as Map<String, dynamic>;
 
-    final pickupDisplay = data["pickupDateTimeText"] ?? "Non défini";
-    final finishDisplay = data["finishTimeText"] ?? "Non terminé";
-
     DateTime? pickupTime;
     if (data["pickupDateTimeUtc"] is Timestamp) {
-      pickupTime = (data["pickupDateTimeUtc"] as Timestamp).toDate();
+      pickupTime =
+          (data["pickupDateTimeUtc"] as Timestamp).toDate();
     }
 
     final now = DateTime.now();
+    final bool canStart =
+        data["status"] == statusAssigned &&
+        (pickupTime == null || !pickupTime.isAfter(now));
 
-    bool canStart = false;
-    if (data["status"] == statusAssigned) {
-      if (pickupTime == null) {
-        canStart = true;
-      } else {
-        canStart = now.isAfter(pickupTime);
-      }
-    }
-
-    bool canFinish = (data["status"] == statusStarted);
+    final bool canFinish = data["status"] == statusStarted;
+    final bool canUnassign = data["status"] == statusAssigned;
 
     return Card(
       margin: const EdgeInsets.all(10),
@@ -178,38 +217,30 @@ class DriverPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Date & Heure : $pickupDisplay",
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(
+              "Date & Heure : ${data["pickupDateTimeText"] ?? ""}",
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
             const SizedBox(height: 8),
-
-            Text("Nom du client : ${data["passengerName"] ?? ""}"),
-            Text("Téléphone du client : ${data["passengerPhone"] ?? ""}"),
-            Text("Adresse départ : ${data["pickupLocation"] ?? ""}"),
-            Text("Adresse destination : ${data["dropLocation"] ?? ""}"),
-            Text("Numéro de vol : ${data["flightNumber"] ?? ""}"),
-            Text("Nombre de personnes : ${data["personsCount"] ?? ""}"),
-            Text("Nombre de bagages : ${data["bagsCount"] ?? ""}"),
-            Text("Autres : ${data["otherNotes"] ?? ""}"),
-
-            const SizedBox(height: 10),
-
+            Text("Client : ${data["passengerName"] ?? ""}"),
+            Text("Départ : ${data["pickupLocation"] ?? ""}"),
+            Text("Destination : ${data["dropLocation"] ?? ""}"),
             Text("Statut : ${data["status"]}"),
-            Text("Heure de fin : $finishDisplay"),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 ElevatedButton(
-                  onPressed: canStart ? () => startRide(ride) : null,
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange),
+                  onPressed:
+                      canStart ? () => startRide(context, ride) : null,
                   child: const Text("Démarrer"),
                 ),
+                const SizedBox(width: 10),
                 ElevatedButton(
-                  onPressed: canFinish ? () => finishRide(ride) : null,
+                  onPressed:
+                      canFinish ? () => finishRide(ride) : null,
                   child: const Text("Terminer"),
                 ),
               ],
@@ -219,13 +250,23 @@ class DriverPage extends StatelessWidget {
               const Padding(
                 padding: EdgeInsets.only(top: 6),
                 child: Text(
-                  "Vous pouvez démarrer uniquement après l’heure assignée",
+                  "Vous pouvez démarrer uniquement à l’heure prévue",
                   style: TextStyle(
                       color: Colors.red,
                       fontSize: 12,
                       fontStyle: FontStyle.italic),
                 ),
-              )
+              ),
+
+            if (canUnassign)
+              TextButton.icon(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                label: const Text(
+                  "Supprimer la course",
+                  style: TextStyle(color: Colors.red),
+                ),
+                onPressed: () => unassignRide(context, ride),
+              ),
           ],
         ),
       ),
@@ -238,20 +279,10 @@ class DriverPage extends StatelessWidget {
     return Card(
       color: Colors.grey.shade100,
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Client : ${data["passengerName"] ?? ""}",
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text("Date : ${data["pickupDateTimeText"] ?? ""}"),
-            Text("Statut final : ${data["status"]}"),
-            if (data["finishTimeText"] != null)
-              Text("Terminé à : ${data["finishTimeText"]}"),
-          ],
+      child: ListTile(
+        title: Text(data["passengerName"] ?? ""),
+        subtitle: Text(
+          "Date : ${data["pickupDateTimeText"] ?? ""}\nStatut : ${data["status"]}",
         ),
       ),
     );

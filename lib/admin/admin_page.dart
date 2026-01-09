@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
+import 'assigned_rides_page.dart';
+
 class AdminPage extends StatefulWidget {
   const AdminPage({Key? key}) : super(key: key);
 
@@ -69,6 +71,7 @@ class _AdminPageState extends State<AdminPage> {
 
     await FirebaseFirestore.instance.collection("rides").add({
       "assignedDriverId": selectedDriver,
+      "assignedAt": FieldValue.serverTimestamp(), // ✅ NEW
       "pickupDateTimeUtc": pickupDateTime,
       "pickupDateTimeText":
           DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(pickupDateTime!),
@@ -115,7 +118,6 @@ class _AdminPageState extends State<AdminPage> {
           IconButton(onPressed: logout, icon: const Icon(Icons.logout))
         ],
       ),
-
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(
@@ -125,7 +127,6 @@ class _AdminPageState extends State<AdminPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                // ---------------- DATE ----------------
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
@@ -140,7 +141,6 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                 ),
 
-                // ---------------- CLIENT DETAILS ----------------
                 TextFormField(
                   controller: passenger,
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
@@ -154,7 +154,6 @@ class _AdminPageState extends State<AdminPage> {
                       const InputDecoration(labelText: "Téléphone"),
                 ),
 
-                // ---------------- PICKUP / DROP ----------------
                 TextFormField(
                   controller: pickup,
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
@@ -165,11 +164,10 @@ class _AdminPageState extends State<AdminPage> {
                 TextFormField(
                   controller: drop,
                   validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
-                  decoration: const InputDecoration(
-                      labelText: "Adresse destination"),
+                  decoration:
+                      const InputDecoration(labelText: "Adresse destination"),
                 ),
 
-                // ---------------- EXTRA FIELDS ----------------
                 TextFormField(
                   controller: flight,
                   decoration:
@@ -179,15 +177,15 @@ class _AdminPageState extends State<AdminPage> {
                 TextFormField(
                   controller: persons,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: "Nombre de personnes"),
+                  decoration:
+                      const InputDecoration(labelText: "Nombre de personnes"),
                 ),
 
                 TextFormField(
                   controller: bags,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: "Nombre de bagages"),
+                  decoration:
+                      const InputDecoration(labelText: "Nombre de bagages"),
                 ),
 
                 TextFormField(
@@ -197,7 +195,6 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 10),
 
-                // ---------------- DRIVER DROPDOWN ----------------
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
@@ -210,16 +207,12 @@ class _AdminPageState extends State<AdminPage> {
                       decoration: const InputDecoration(
                           labelText: "Sélectionner un chauffeur"),
                       items: drivers.map((d) {
-                        final name =
-                            (d["name"] ?? "Sans nom").toString();
+                        final name = (d["name"] ?? "Sans nom").toString();
                         return DropdownMenuItem(
                             value: d.id, child: Text(name));
                       }).toList(),
-                      onChanged: (v) => setState(() {
-                        selectedDriver = v;
-                      }),
-                      validator: (v) =>
-                          v == null ? "Obligatoire" : null,
+                      onChanged: (v) => setState(() => selectedDriver = v),
+                      validator: (v) => v == null ? "Obligatoire" : null,
                     );
                   },
                 ),
@@ -228,16 +221,32 @@ class _AdminPageState extends State<AdminPage> {
 
                 Center(
                   child: ElevatedButton(
-                      onPressed: assignRide,
-                      child: const Text("Assigner la course")),
+                    onPressed: assignRide,
+                    child: const Text("Assigner la course"),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AssignedRidesPage(),
+                        ),
+                      );
+                    },
+                    child: const Text("Voir les courses assignées"),
+                  ),
                 ),
 
                 const SizedBox(height: 30),
 
-                // ---------------- DRIVER MANAGEMENT ----------------
                 const Text("Gérer les chauffeurs",
-                    style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 
                 const SizedBox(height: 10),
 
@@ -254,8 +263,9 @@ class _AdminPageState extends State<AdminPage> {
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
-                    if (!s.hasData)
+                    if (!s.hasData) {
                       return const CircularProgressIndicator();
+                    }
 
                     List docs = s.data!.docs;
 
@@ -275,36 +285,31 @@ class _AdminPageState extends State<AdminPage> {
 
                     return Column(
                       children: docs.map<Widget>((d) {
-                        final name =
-                            (d["name"] ?? "Sans nom").toString();
+                        final name = (d["name"] ?? "Sans nom").toString();
 
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.person),
                             title: Text(name),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete,
-                                  color: Colors.red),
+                              icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () {
                                 showDialog(
                                   context: context,
                                   builder: (_) => AlertDialog(
                                     title: const Text("Supprimer ?"),
-                                    content:
-                                        Text("Supprimer $name ?"),
+                                    content: Text("Supprimer $name ?"),
                                     actions: [
                                       TextButton(
                                           onPressed: () =>
                                               Navigator.pop(context),
-                                          child:
-                                              const Text("Annuler")),
+                                          child: const Text("Annuler")),
                                       TextButton(
                                           onPressed: () {
                                             Navigator.pop(context);
                                             deleteDriver(d.id);
                                           },
-                                          child:
-                                              const Text("Supprimer")),
+                                          child: const Text("Supprimer")),
                                     ],
                                   ),
                                 );
@@ -315,7 +320,7 @@ class _AdminPageState extends State<AdminPage> {
                       }).toList(),
                     );
                   },
-                )
+                ),
               ],
             ),
           ),
