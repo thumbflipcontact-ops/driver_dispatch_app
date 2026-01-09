@@ -223,9 +223,17 @@ class DriverPage extends StatelessWidget {
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 8),
+
             Text("Client : ${data["passengerName"] ?? ""}"),
+            Text("Téléphone : ${data["passengerPhone"] ?? ""}"),
             Text("Départ : ${data["pickupLocation"] ?? ""}"),
             Text("Destination : ${data["dropLocation"] ?? ""}"),
+            Text("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
+            Text("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
+            Text("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
+            Text("Autres notes : ${data["otherNotes"] ?? "-"}"),
+
+            const SizedBox(height: 8),
             Text("Statut : ${data["status"]}"),
 
             const SizedBox(height: 12),
@@ -282,7 +290,9 @@ class DriverPage extends StatelessWidget {
       child: ListTile(
         title: Text(data["passengerName"] ?? ""),
         subtitle: Text(
-          "Date : ${data["pickupDateTimeText"] ?? ""}\nStatut : ${data["status"]}",
+          "Date : ${data["pickupDateTimeText"] ?? ""}\n"
+          "Vol : ${data["flightNumber"] ?? "-"}\n"
+          "Statut : ${data["status"]}",
         ),
       ),
     );
