@@ -20,13 +20,8 @@ class DriverPage extends StatelessWidget {
   DateTime? _getPickupDateTime(Map<String, dynamic> data) {
     final raw = data["pickupDateTimeUtc"];
 
-    if (raw is Timestamp) {
-      return raw.toDate();
-    }
-
-    if (raw is DateTime) {
-      return raw;
-    }
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is DateTime) return raw;
 
     final text = data["pickupDateTimeText"];
     if (text is String && text.isNotEmpty) {
@@ -36,11 +31,10 @@ class DriverPage extends StatelessWidget {
         return null;
       }
     }
-
     return null;
   }
 
-  /// ▶️ START RIDE — no pickup-time restriction anymore
+  /// ▶️ Start ride (NO pickup-time restriction)
   startRide(BuildContext context, DocumentSnapshot ride) async {
     final now = DateTime.now();
 
@@ -218,6 +212,10 @@ class DriverPage extends StatelessWidget {
             Text("Téléphone : ${data["passengerPhone"] ?? ""}"),
             Text("Départ : ${data["pickupLocation"] ?? ""}"),
             Text("Destination : ${data["dropLocation"] ?? ""}"),
+            Text("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
+            Text("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
+            Text("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
+            Text("Autres notes : ${data["otherNotes"] ?? "-"}"),
 
             const SizedBox(height: 8),
             Text("Statut : ${data["status"]}"),
@@ -265,6 +263,7 @@ class DriverPage extends StatelessWidget {
         title: Text(data["passengerName"] ?? ""),
         subtitle: Text(
           "Date : ${data["pickupDateTimeText"] ?? ""}\n"
+          "Vol : ${data["flightNumber"] ?? "-"}\n"
           "Statut : ${data["status"]}",
         ),
       ),
