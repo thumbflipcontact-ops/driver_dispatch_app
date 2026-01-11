@@ -16,8 +16,7 @@ class AssignedRidesPage extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection("rides")
-            .orderBy("assignedAt", descending: false)
-            .snapshots(),
+            .snapshots(), // ✅ NO orderBy here
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -33,6 +32,23 @@ class AssignedRidesPage extends StatelessWidget {
           if (rides.isEmpty) {
             return const Center(child: Text("Aucune course"));
           }
+
+          // ✅ SORT LOCALLY WITH FALLBACK
+          rides.sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+
+            final Timestamp? aTime =
+                aData["assignedAt"] ?? aData["pickupDateTimeUtc"];
+            final Timestamp? bTime =
+                bData["assignedAt"] ?? bData["pickupDateTimeUtc"];
+
+            if (aTime == null && bTime == null) return 0;
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+
+            return aTime.compareTo(bTime);
+          });
 
           return ListView.builder(
             itemCount: rides.length,
@@ -121,7 +137,6 @@ class AssignedRidesPage extends StatelessWidget {
     );
   }
 
-  /// 🔽 Bottom sheet to pick a driver
   void _showDriverPicker(BuildContext context, String rideId) {
     showModalBottomSheet(
       context: context,
@@ -170,7 +185,6 @@ class AssignedRidesPage extends StatelessWidget {
     );
   }
 
-  /// 🔹 Resolve driver ID → driver name
   Widget _driverNameWidget(String? driverId) {
     if (driverId == null) {
       return const Text("Chauffeur : Non assigné");

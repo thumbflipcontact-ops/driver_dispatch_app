@@ -16,27 +16,33 @@ class DriverPage extends StatelessWidget {
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
-  /// 🚫 Cannot start if pickup time is in the future
+  /// 🔐 Normalize pickup datetime for ALL historical data
+  DateTime? _getPickupDateTime(Map<String, dynamic> data) {
+    final raw = data["pickupDateTimeUtc"];
+
+    if (raw is Timestamp) {
+      return raw.toDate();
+    }
+
+    if (raw is DateTime) {
+      return raw;
+    }
+
+    final text = data["pickupDateTimeText"];
+    if (text is String && text.isNotEmpty) {
+      try {
+        return DateFormat("dd/MM/yyyy HH:mm", "fr_FR").parse(text);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  /// ▶️ START RIDE — no pickup-time restriction anymore
   startRide(BuildContext context, DocumentSnapshot ride) async {
-    final data = ride.data() as Map<String, dynamic>;
-
-    DateTime now = DateTime.now();
-    DateTime? pickupTime;
-
-    if (data["pickupDateTimeUtc"] is Timestamp) {
-      pickupTime =
-          (data["pickupDateTimeUtc"] as Timestamp).toDate();
-    }
-
-    if (pickupTime != null && pickupTime.isAfter(now)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              "Vous pouvez démarrer uniquement à l’heure de prise en charge"),
-        ),
-      );
-      return;
-    }
+    final now = DateTime.now();
 
     await FirebaseFirestore.instance
         .collection("rides")
@@ -63,7 +69,6 @@ class DriverPage extends StatelessWidget {
     });
   }
 
-  /// ❌ Prevent unassign if ride already started
   unassignRide(BuildContext context, DocumentSnapshot ride) async {
     final data = ride.data() as Map<String, dynamic>;
 
@@ -85,9 +90,8 @@ class DriverPage extends StatelessWidget {
       "status": statusUnassigned,
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Course retirée")),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Course retirée")));
   }
 
   @override
@@ -110,11 +114,6 @@ class DriverPage extends StatelessWidget {
             .where("assignedDriverId", isEqualTo: uid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(
-                child: Text("Aucune course assignée."));
-          }
-
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -126,18 +125,18 @@ class DriverPage extends StatelessWidget {
                 child: Text("Aucune course assignée."));
           }
 
-          /// ✅ Sort locally by pickup time (ascending)
+          /// ✅ Always sorted by pickup time (old + new rides)
           rides.sort((a, b) {
-            final aTime = a["pickupDateTimeUtc"];
-            final bTime = b["pickupDateTimeUtc"];
+            final aTime =
+                _getPickupDateTime(a.data() as Map<String, dynamic>);
+            final bTime =
+                _getPickupDateTime(b.data() as Map<String, dynamic>);
 
             if (aTime == null && bTime == null) return 0;
             if (aTime == null) return 1;
             if (bTime == null) return -1;
 
-            return (aTime as Timestamp)
-                .toDate()
-                .compareTo((bTime as Timestamp).toDate());
+            return aTime.compareTo(bTime);
           });
 
           final activeRides =
@@ -196,17 +195,7 @@ class DriverPage extends StatelessWidget {
   Widget _activeRideCard(BuildContext context, DocumentSnapshot ride) {
     final data = ride.data() as Map<String, dynamic>;
 
-    DateTime? pickupTime;
-    if (data["pickupDateTimeUtc"] is Timestamp) {
-      pickupTime =
-          (data["pickupDateTimeUtc"] as Timestamp).toDate();
-    }
-
-    final now = DateTime.now();
-    final bool canStart =
-        data["status"] == statusAssigned &&
-        (pickupTime == null || !pickupTime.isAfter(now));
-
+    final bool canStart = data["status"] == statusAssigned;
     final bool canFinish = data["status"] == statusStarted;
     final bool canUnassign = data["status"] == statusAssigned;
 
@@ -222,16 +211,13 @@ class DriverPage extends StatelessWidget {
               style:
                   const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
+
             const SizedBox(height: 8),
 
             Text("Client : ${data["passengerName"] ?? ""}"),
             Text("Téléphone : ${data["passengerPhone"] ?? ""}"),
             Text("Départ : ${data["pickupLocation"] ?? ""}"),
             Text("Destination : ${data["dropLocation"] ?? ""}"),
-            Text("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
-            Text("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
-            Text("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
-            Text("Autres notes : ${data["otherNotes"] ?? "-"}"),
 
             const SizedBox(height: 8),
             Text("Statut : ${data["status"]}"),
@@ -253,18 +239,6 @@ class DriverPage extends StatelessWidget {
                 ),
               ],
             ),
-
-            if (!canStart && data["status"] == statusAssigned)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  "Vous pouvez démarrer uniquement à l’heure prévue",
-                  style: TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic),
-                ),
-              ),
 
             if (canUnassign)
               TextButton.icon(
@@ -291,7 +265,6 @@ class DriverPage extends StatelessWidget {
         title: Text(data["passengerName"] ?? ""),
         subtitle: Text(
           "Date : ${data["pickupDateTimeText"] ?? ""}\n"
-          "Vol : ${data["flightNumber"] ?? "-"}\n"
           "Statut : ${data["status"]}",
         ),
       ),
