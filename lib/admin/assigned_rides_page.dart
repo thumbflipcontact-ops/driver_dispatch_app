@@ -16,7 +16,7 @@ class AssignedRidesPage extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection("rides")
-            .snapshots(), // ✅ NO orderBy here
+            .snapshots(), // no orderBy (supports old rides)
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -33,7 +33,7 @@ class AssignedRidesPage extends StatelessWidget {
             return const Center(child: Text("Aucune course"));
           }
 
-          // ✅ SORT LOCALLY WITH FALLBACK
+          /// 🔽 SORT: most recent → oldest
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
@@ -47,7 +47,7 @@ class AssignedRidesPage extends StatelessWidget {
             if (aTime == null) return 1;
             if (bTime == null) return -1;
 
-            return aTime.compareTo(bTime);
+            return bTime.compareTo(aTime); // 🔥 DESC
           });
 
           return ListView.builder(
@@ -58,8 +58,6 @@ class AssignedRidesPage extends StatelessWidget {
 
               final String status = data["status"] ?? "";
               final String? driverId = data["assignedDriverId"];
-              final String pickupTime =
-                  data["pickupDateTimeText"] ?? "Heure non définie";
 
               final bool canModify = status == statusAssigned;
               final bool canAssign = status == statusUnassigned;
@@ -68,65 +66,98 @@ class AssignedRidesPage extends StatelessWidget {
               return Card(
                 margin:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: ListTile(
-                  title: Text(data["passengerName"] ?? "Client"),
-                  subtitle: Column(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Heure de prise en charge : $pickupTime"),
+
+                      /// 🔹 Header
+                      Text(
+                        data["passengerName"] ?? "Client",
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      Text(
+                          "Heure de prise en charge : ${data["pickupDateTimeText"] ?? "-"}"),
+                      Text(
+                          "Adresse départ : ${data["pickupLocation"] ?? "-"}"),
+                      Text(
+                          "Adresse destination : ${data["dropLocation"] ?? "-"}"),
+                      Text(
+                          "Numéro de vol : ${data["flightNumber"] ?? "-"}"),
+                      Text(
+                          "Nombre de personnes : ${data["personsCount"] ?? "-"}"),
+                      Text(
+                          "Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
+                      Text(
+                          "Autres notes : ${data["otherNotes"] ?? "-"}"),
+
+                      const SizedBox(height: 6),
+
                       Text("Statut : $status"),
                       _driverNameWidget(driverId),
+
+                      const SizedBox(height: 8),
+
+                      /// 🔹 Actions
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: PopupMenuButton<String>(
+                          itemBuilder: (context) {
+                            final items = <PopupMenuEntry<String>>[];
+
+                            if (canModify) {
+                              items.add(const PopupMenuItem(
+                                value: "remove",
+                                child: Text("Retirer chauffeur"),
+                              ));
+                            }
+
+                            if (canAssign) {
+                              items.add(const PopupMenuItem(
+                                value: "assign",
+                                child: Text("Assigner chauffeur"),
+                              ));
+                            }
+
+                            if (canDelete) {
+                              items.add(const PopupMenuItem(
+                                value: "delete",
+                                child: Text("Supprimer la course"),
+                              ));
+                            }
+
+                            return items;
+                          },
+                          onSelected: (value) async {
+                            if (value == "remove") {
+                              await FirebaseFirestore.instance
+                                  .collection("rides")
+                                  .doc(ride.id)
+                                  .update({
+                                "assignedDriverId": null,
+                                "status": statusUnassigned,
+                              });
+                            }
+
+                            if (value == "assign") {
+                              _showDriverPicker(context, ride.id);
+                            }
+
+                            if (value == "delete") {
+                              await FirebaseFirestore.instance
+                                  .collection("rides")
+                                  .doc(ride.id)
+                                  .delete();
+                            }
+                          },
+                        ),
+                      ),
                     ],
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    itemBuilder: (context) {
-                      final items = <PopupMenuEntry<String>>[];
-
-                      if (canModify) {
-                        items.add(const PopupMenuItem(
-                          value: "remove",
-                          child: Text("Retirer chauffeur"),
-                        ));
-                      }
-
-                      if (canAssign) {
-                        items.add(const PopupMenuItem(
-                          value: "assign",
-                          child: Text("Assigner chauffeur"),
-                        ));
-                      }
-
-                      if (canDelete) {
-                        items.add(const PopupMenuItem(
-                          value: "delete",
-                          child: Text("Supprimer la course"),
-                        ));
-                      }
-
-                      return items;
-                    },
-                    onSelected: (value) async {
-                      if (value == "remove") {
-                        await FirebaseFirestore.instance
-                            .collection("rides")
-                            .doc(ride.id)
-                            .update({
-                          "assignedDriverId": null,
-                          "status": statusUnassigned,
-                        });
-                      }
-
-                      if (value == "assign") {
-                        _showDriverPicker(context, ride.id);
-                      }
-
-                      if (value == "delete") {
-                        await FirebaseFirestore.instance
-                            .collection("rides")
-                            .doc(ride.id)
-                            .delete();
-                      }
-                    },
                   ),
                 ),
               );
@@ -137,6 +168,7 @@ class AssignedRidesPage extends StatelessWidget {
     );
   }
 
+  /// 🔽 Driver picker
   void _showDriverPicker(BuildContext context, String rideId) {
     showModalBottomSheet(
       context: context,
@@ -185,6 +217,7 @@ class AssignedRidesPage extends StatelessWidget {
     );
   }
 
+  /// 🔹 Resolve driver name
   Widget _driverNameWidget(String? driverId) {
     if (driverId == null) {
       return const Text("Chauffeur : Non assigné");
