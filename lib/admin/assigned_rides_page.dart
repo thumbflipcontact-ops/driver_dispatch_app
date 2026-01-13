@@ -16,7 +16,7 @@ class AssignedRidesPage extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection("rides")
-            .snapshots(), // no orderBy (supports old rides)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
@@ -33,7 +33,9 @@ class AssignedRidesPage extends StatelessWidget {
             return const Center(child: Text("Aucune course"));
           }
 
-          /// 🔽 SORT: most recent → oldest
+          // ─────────────────────────────────────────
+          // SAME SORTING LOGIC (MOST RECENT FIRST)
+          // ─────────────────────────────────────────
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
@@ -47,7 +49,7 @@ class AssignedRidesPage extends StatelessWidget {
             if (aTime == null) return 1;
             if (bTime == null) return -1;
 
-            return bTime.compareTo(aTime); // 🔥 DESC
+            return bTime.compareTo(aTime);
           });
 
           return ListView.builder(
@@ -61,7 +63,6 @@ class AssignedRidesPage extends StatelessWidget {
 
               final bool canModify = status == statusAssigned;
               final bool canAssign = status == statusUnassigned;
-              final bool canDelete = driverId == null;
 
               return Card(
                 margin:
@@ -72,17 +73,21 @@ class AssignedRidesPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
 
-                      /// 🔹 Header
+                      // ───────── HEADER ─────────
                       Text(
                         data["passengerName"] ?? "Client",
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
 
                       const SizedBox(height: 6),
 
                       Text(
-                          "Heure de prise en charge : ${data["pickupDateTimeText"] ?? "-"}"),
+                          "Téléphone : ${data["passengerPhone"] ?? "-"}"),
+                      Text(
+                          "Heure : ${data["pickupDateTimeText"] ?? "-"}"),
                       Text(
                           "Adresse départ : ${data["pickupLocation"] ?? "-"}"),
                       Text(
@@ -103,7 +108,7 @@ class AssignedRidesPage extends StatelessWidget {
 
                       const SizedBox(height: 8),
 
-                      /// 🔹 Actions
+                      // ───────── ACTIONS ─────────
                       Align(
                         alignment: Alignment.centerRight,
                         child: PopupMenuButton<String>(
@@ -124,12 +129,10 @@ class AssignedRidesPage extends StatelessWidget {
                               ));
                             }
 
-                            if (canDelete) {
-                              items.add(const PopupMenuItem(
-                                value: "delete",
-                                child: Text("Supprimer la course"),
-                              ));
-                            }
+                            items.add(const PopupMenuItem(
+                              value: "delete",
+                              child: Text("Supprimer la course"),
+                            ));
 
                             return items;
                           },
@@ -168,7 +171,9 @@ class AssignedRidesPage extends StatelessWidget {
     );
   }
 
-  /// 🔽 Driver picker
+  // ─────────────────────────────────────────
+  // DRIVER PICKER
+  // ─────────────────────────────────────────
   void _showDriverPicker(BuildContext context, String rideId) {
     showModalBottomSheet(
       context: context,
@@ -217,7 +222,9 @@ class AssignedRidesPage extends StatelessWidget {
     );
   }
 
-  /// 🔹 Resolve driver name
+  // ─────────────────────────────────────────
+  // DRIVER NAME RESOLUTION
+  // ─────────────────────────────────────────
   Widget _driverNameWidget(String? driverId) {
     if (driverId == null) {
       return const Text("Chauffeur : Non assigné");

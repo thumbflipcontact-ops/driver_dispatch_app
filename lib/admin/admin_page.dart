@@ -126,7 +126,7 @@ class _AdminPageState extends State<AdminPage> {
         ],
       ),
 
-      // ✅ FIXED FOOTER
+      // ✅ FIXED FOOTER (ALWAYS VISIBLE)
       bottomNavigationBar: _footer(),
 
       body: SafeArea(
@@ -138,7 +138,6 @@ class _AdminPageState extends State<AdminPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                /// DATE & TIME
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
@@ -181,7 +180,6 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 10),
 
-                /// DRIVER SELECT
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
@@ -190,7 +188,6 @@ class _AdminPageState extends State<AdminPage> {
                     }
 
                     final drivers = s.data!.docs;
-
                     if (drivers.isEmpty) {
                       return const Text("Aucun chauffeur");
                     }
@@ -236,7 +233,7 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 30),
 
-                // ───────────── DRIVER MANAGEMENT ─────────────
+                // ───────── DRIVER MANAGEMENT ─────────
                 const Text(
                   "Gérer les chauffeurs",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -380,8 +377,22 @@ class _AdminPageState extends State<AdminPage> {
                   .snapshots(),
               builder: (context, s) {
                 if (!s.hasData) return const Text("-");
+
+                DateTime now = DateTime.now();
+                var docs = s.data!.docs;
+
+                // ✅ UPCOMING = status + date ≥ now
+                if (status == "assigné") {
+                  docs = docs.where((d) {
+                    final ts = d["pickupDateTimeUtc"];
+                    return ts != null &&
+                        (ts.toDate().isAfter(now) ||
+                            ts.toDate().isAtSameMomentAs(now));
+                  }).toList();
+                }
+
                 return Text(
-                  s.data!.docs.length.toString(),
+                  docs.length.toString(),
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

@@ -28,20 +28,39 @@ class RidesByStatusPage extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const Center(
-                child: Text("Erreur de chargement des courses"));
+              child: Text("Erreur de chargement des courses"),
+            );
           }
 
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final rides = snapshot.data!.docs;
+          DateTime now = DateTime.now();
+          List<QueryDocumentSnapshot> rides = snapshot.data!.docs;
+
+          // ─────────────────────────────────────────
+          // UPCOMING = status assigné + date >= now
+          // ─────────────────────────────────────────
+          if (status == "assigné") {
+            rides = rides.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final Timestamp? ts = data["pickupDateTimeUtc"];
+              if (ts == null) return false;
+
+              final date = ts.toDate();
+              return date.isAfter(now) ||
+                  date.isAtSameMomentAs(now);
+            }).toList();
+          }
 
           if (rides.isEmpty) {
             return const Center(child: Text("Aucune course"));
           }
 
-          /// 🔽 SAME SORT LOGIC AS AssignedRidesPage
+          // ─────────────────────────────────────────
+          // SAME SORTING AS AssignedRidesPage
+          // ─────────────────────────────────────────
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
@@ -55,7 +74,7 @@ class RidesByStatusPage extends StatelessWidget {
             if (aTime == null) return 1;
             if (bTime == null) return -1;
 
-            return bTime.compareTo(aTime); // DESC
+            return bTime.compareTo(aTime);
           });
 
           return ListView.builder(
@@ -63,7 +82,6 @@ class RidesByStatusPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final ride = rides[index];
               final data = ride.data() as Map<String, dynamic>;
-
               final String? driverId = data["assignedDriverId"];
 
               return Card(
@@ -79,7 +97,9 @@ class RidesByStatusPage extends StatelessWidget {
                       Text(
                         data["passengerName"] ?? "Client",
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
 
                       const SizedBox(height: 6),
@@ -105,6 +125,22 @@ class RidesByStatusPage extends StatelessWidget {
 
                       Text("Statut : ${data["status"] ?? "-"}"),
                       _driverNameWidget(driverId),
+
+                      const SizedBox(height: 8),
+
+                      /// DELETE ACTION (ALL STATUSES)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () async {
+                            await FirebaseFirestore.instance
+                                .collection("rides")
+                                .doc(ride.id)
+                                .delete();
+                          },
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -116,7 +152,9 @@ class RidesByStatusPage extends StatelessWidget {
     );
   }
 
-  /// 🔹 Resolve driver name (same logic as AssignedRidesPage)
+  // ─────────────────────────────────────────
+  // DRIVER NAME RESOLUTION
+  // ─────────────────────────────────────────
   Widget _driverNameWidget(String? driverId) {
     if (driverId == null) {
       return const Text("Chauffeur : Non assigné");
