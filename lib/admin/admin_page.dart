@@ -22,7 +22,6 @@ class _AdminPageState extends State<AdminPage> {
   final persons = TextEditingController();
   final bags = TextEditingController();
   final others = TextEditingController();
-
   final searchController = TextEditingController();
 
   String? selectedDriver;
@@ -110,9 +109,8 @@ class _AdminPageState extends State<AdminPage> {
   // ───────────────── DELETE DRIVER ─────────────────
   Future<void> deleteDriver(String id) async {
     await FirebaseFirestore.instance.collection("users").doc(id).delete();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Chauffeur supprimé")),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text("Chauffeur supprimé")));
   }
 
   // ───────────────── UI ─────────────────
@@ -126,7 +124,6 @@ class _AdminPageState extends State<AdminPage> {
         ],
       ),
 
-      // ✅ FIXED FOOTER (ALWAYS VISIBLE)
       bottomNavigationBar: _footer(),
 
       body: SafeArea(
@@ -176,6 +173,32 @@ class _AdminPageState extends State<AdminPage> {
                   validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration:
                       const InputDecoration(labelText: "Adresse destination"),
+                ),
+
+                TextFormField(
+                  controller: flight,
+                  decoration:
+                      const InputDecoration(labelText: "Numéro de vol"),
+                ),
+
+                TextFormField(
+                  controller: persons,
+                  keyboardType: TextInputType.number,
+                  decoration:
+                      const InputDecoration(labelText: "Nombre de personnes"),
+                ),
+
+                TextFormField(
+                  controller: bags,
+                  keyboardType: TextInputType.number,
+                  decoration:
+                      const InputDecoration(labelText: "Nombre de bagages"),
+                ),
+
+                TextFormField(
+                  controller: others,
+                  decoration:
+                      const InputDecoration(labelText: "Autres notes"),
                 ),
 
                 const SizedBox(height: 10),
@@ -233,21 +256,21 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 30),
 
-                // ───────── DRIVER MANAGEMENT ─────────
                 const Text(
                   "Gérer les chauffeurs",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style:
+                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 10),
 
                 TextField(
                   controller: searchController,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
                     labelText: "Rechercher",
                   ),
-                  onChanged: (_) => setState(() {}),
                 ),
 
                 const SizedBox(height: 10),
@@ -381,13 +404,13 @@ class _AdminPageState extends State<AdminPage> {
                 DateTime now = DateTime.now();
                 var docs = s.data!.docs;
 
-                // ✅ UPCOMING = status + date ≥ now
                 if (status == "assigné") {
                   docs = docs.where((d) {
                     final ts = d["pickupDateTimeUtc"];
-                    return ts != null &&
-                        (ts.toDate().isAfter(now) ||
-                            ts.toDate().isAtSameMomentAs(now));
+                    if (ts == null) return false;
+                    final date = ts.toDate();
+                    return date.isAfter(now) ||
+                        date.isAtSameMomentAs(now);
                   }).toList();
                 }
 

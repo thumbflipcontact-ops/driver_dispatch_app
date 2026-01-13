@@ -18,24 +18,19 @@ class AssignedRidesPage extends StatelessWidget {
             .collection("rides")
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(
-                child: Text("Erreur de chargement des courses"));
-          }
-
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final rides = snapshot.data!.docs;
+          // ✅ ALWAYS create a fresh list
+          final List<QueryDocumentSnapshot> rides =
+              snapshot.data!.docs.where((d) => d.exists).toList();
 
           if (rides.isEmpty) {
             return const Center(child: Text("Aucune course"));
           }
 
-          // ─────────────────────────────────────────
-          // SAME SORTING LOGIC (MOST RECENT FIRST)
-          // ─────────────────────────────────────────
+          // ✅ SAFE SORT (same logic as everywhere else)
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
@@ -73,7 +68,6 @@ class AssignedRidesPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
 
-                      // ───────── HEADER ─────────
                       Text(
                         data["passengerName"] ?? "Client",
                         style: const TextStyle(
@@ -84,22 +78,14 @@ class AssignedRidesPage extends StatelessWidget {
 
                       const SizedBox(height: 6),
 
-                      Text(
-                          "Téléphone : ${data["passengerPhone"] ?? "-"}"),
-                      Text(
-                          "Heure : ${data["pickupDateTimeText"] ?? "-"}"),
-                      Text(
-                          "Adresse départ : ${data["pickupLocation"] ?? "-"}"),
-                      Text(
-                          "Adresse destination : ${data["dropLocation"] ?? "-"}"),
-                      Text(
-                          "Numéro de vol : ${data["flightNumber"] ?? "-"}"),
-                      Text(
-                          "Nombre de personnes : ${data["personsCount"] ?? "-"}"),
-                      Text(
-                          "Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
-                      Text(
-                          "Autres notes : ${data["otherNotes"] ?? "-"}"),
+                      Text("Téléphone : ${data["passengerPhone"] ?? "-"}"),
+                      Text("Heure : ${data["pickupDateTimeText"] ?? "-"}"),
+                      Text("Adresse départ : ${data["pickupLocation"] ?? "-"}"),
+                      Text("Adresse destination : ${data["dropLocation"] ?? "-"}"),
+                      Text("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
+                      Text("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
+                      Text("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
+                      Text("Autres notes : ${data["otherNotes"] ?? "-"}"),
 
                       const SizedBox(height: 6),
 
@@ -108,55 +94,20 @@ class AssignedRidesPage extends StatelessWidget {
 
                       const SizedBox(height: 8),
 
-                      // ───────── ACTIONS ─────────
                       Align(
                         alignment: Alignment.centerRight,
                         child: PopupMenuButton<String>(
-                          itemBuilder: (context) {
-                            final items = <PopupMenuEntry<String>>[];
-
-                            if (canModify) {
-                              items.add(const PopupMenuItem(
-                                value: "remove",
-                                child: Text("Retirer chauffeur"),
-                              ));
-                            }
-
-                            if (canAssign) {
-                              items.add(const PopupMenuItem(
-                                value: "assign",
-                                child: Text("Assigner chauffeur"),
-                              ));
-                            }
-
-                            items.add(const PopupMenuItem(
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
                               value: "delete",
                               child: Text("Supprimer la course"),
-                            ));
-
-                            return items;
-                          },
-                          onSelected: (value) async {
-                            if (value == "remove") {
-                              await FirebaseFirestore.instance
-                                  .collection("rides")
-                                  .doc(ride.id)
-                                  .update({
-                                "assignedDriverId": null,
-                                "status": statusUnassigned,
-                              });
-                            }
-
-                            if (value == "assign") {
-                              _showDriverPicker(context, ride.id);
-                            }
-
-                            if (value == "delete") {
-                              await FirebaseFirestore.instance
-                                  .collection("rides")
-                                  .doc(ride.id)
-                                  .delete();
-                            }
+                            ),
+                          ],
+                          onSelected: (_) async {
+                            await FirebaseFirestore.instance
+                                .collection("rides")
+                                .doc(ride.id)
+                                .delete();
                           },
                         ),
                       ),
@@ -171,60 +122,7 @@ class AssignedRidesPage extends StatelessWidget {
     );
   }
 
-  // ─────────────────────────────────────────
-  // DRIVER PICKER
-  // ─────────────────────────────────────────
-  void _showDriverPicker(BuildContext context, String rideId) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) {
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection("users")
-              .where("role", isEqualTo: "driver")
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final drivers = snapshot.data!.docs;
-
-            if (drivers.isEmpty) {
-              return const Center(child: Text("Aucun chauffeur"));
-            }
-
-            return ListView(
-              children: drivers.map((driver) {
-                final name = driver["name"] ?? "Sans nom";
-
-                return ListTile(
-                  leading: const Icon(Icons.person),
-                  title: Text(name),
-                  onTap: () async {
-                    await FirebaseFirestore.instance
-                        .collection("rides")
-                        .doc(rideId)
-                        .update({
-                      "assignedDriverId": driver.id,
-                      "status": statusAssigned,
-                      "assignedAt": FieldValue.serverTimestamp(),
-                    });
-
-                    Navigator.pop(context);
-                  },
-                );
-              }).toList(),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // ─────────────────────────────────────────
-  // DRIVER NAME RESOLUTION
-  // ─────────────────────────────────────────
+  // ───────────────── DRIVER NAME ─────────────────
   Widget _driverNameWidget(String? driverId) {
     if (driverId == null) {
       return const Text("Chauffeur : Non assigné");
@@ -241,9 +139,7 @@ class AssignedRidesPage extends StatelessWidget {
         }
 
         final data = snapshot.data!.data() as Map<String, dynamic>;
-        final name = data["name"] ?? "Sans nom";
-
-        return Text("Chauffeur : $name");
+        return Text("Chauffeur : ${data["name"] ?? "Sans nom"}");
       },
     );
   }
