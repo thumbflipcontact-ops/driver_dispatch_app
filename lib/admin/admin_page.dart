@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
 import 'assigned_rides_page.dart';
+import 'rides_by_status_page.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({Key? key}) : super(key: key);
@@ -22,17 +23,20 @@ class _AdminPageState extends State<AdminPage> {
   final bags = TextEditingController();
   final others = TextEditingController();
 
-  String? selectedDriver;
-  final formKey = GlobalKey<FormState>();
-  DateTime? pickupDateTime;
-
   final searchController = TextEditingController();
 
-  logout() async {
+  String? selectedDriver;
+  DateTime? pickupDateTime;
+
+  final formKey = GlobalKey<FormState>();
+
+  // ───────────────── AUTH ─────────────────
+  Future<void> logout() async {
     await FirebaseAuth.instance.signOut();
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
+  // ───────────────── STREAMS ─────────────────
   Stream<QuerySnapshot> driverStream() {
     return FirebaseFirestore.instance
         .collection("users")
@@ -40,18 +44,20 @@ class _AdminPageState extends State<AdminPage> {
         .snapshots();
   }
 
-  selectDateTime() async {
+  // ───────────────── DATE PICKER ─────────────────
+  Future<void> selectDateTime() async {
     final d = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime(2100),
-      locale: const Locale("fr", "FR"),
     );
     if (d == null) return;
 
-    final t =
-        await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
     if (t == null) return;
 
     setState(() {
@@ -59,7 +65,8 @@ class _AdminPageState extends State<AdminPage> {
     });
   }
 
-  assignRide() async {
+  // ───────────────── ASSIGN RIDE ─────────────────
+  Future<void> assignRide() async {
     if (!formKey.currentState!.validate() ||
         selectedDriver == null ||
         pickupDateTime == null) {
@@ -71,10 +78,10 @@ class _AdminPageState extends State<AdminPage> {
 
     await FirebaseFirestore.instance.collection("rides").add({
       "assignedDriverId": selectedDriver,
-      "assignedAt": FieldValue.serverTimestamp(), // ✅ NEW
+      "assignedAt": FieldValue.serverTimestamp(),
       "pickupDateTimeUtc": pickupDateTime,
       "pickupDateTimeText":
-          DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(pickupDateTime!),
+          DateFormat("dd/MM/yyyy HH:mm").format(pickupDateTime!),
       "passengerName": passenger.text.trim(),
       "passengerPhone": phone.text.trim(),
       "pickupLocation": pickup.text.trim(),
@@ -83,7 +90,7 @@ class _AdminPageState extends State<AdminPage> {
       "personsCount": persons.text.trim(),
       "bagsCount": bags.text.trim(),
       "otherNotes": others.text.trim(),
-      "status": "assigné"
+      "status": "assigné",
     });
 
     passenger.clear();
@@ -98,17 +105,17 @@ class _AdminPageState extends State<AdminPage> {
     pickupDateTime = null;
 
     setState(() {});
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Course assignée")));
   }
 
+  // ───────────────── DELETE DRIVER ─────────────────
   Future<void> deleteDriver(String id) async {
     await FirebaseFirestore.instance.collection("users").doc(id).delete();
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Chauffeur supprimé")));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Chauffeur supprimé")),
+    );
   }
 
+  // ───────────────── UI ─────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -118,15 +125,20 @@ class _AdminPageState extends State<AdminPage> {
           IconButton(onPressed: logout, icon: const Icon(Icons.logout))
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
+
+      // ✅ FIXED FOOTER
+      bottomNavigationBar: _footer(),
+
+      body: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           child: Form(
             key: formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
+                /// DATE & TIME
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
@@ -135,7 +147,7 @@ class _AdminPageState extends State<AdminPage> {
                     child: Text(
                       pickupDateTime == null
                           ? "Sélectionner"
-                          : DateFormat("dd/MM/yyyy HH:mm", "fr_FR")
+                          : DateFormat("dd/MM/yyyy HH:mm")
                               .format(pickupDateTime!),
                     ),
                   ),
@@ -143,73 +155,55 @@ class _AdminPageState extends State<AdminPage> {
 
                 TextFormField(
                   controller: passenger,
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration: const InputDecoration(labelText: "Client"),
                 ),
 
                 TextFormField(
                   controller: phone,
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
-                  decoration:
-                      const InputDecoration(labelText: "Téléphone"),
+                  validator: (v) => v!.isEmpty ? "Obligatoire" : null,
+                  decoration: const InputDecoration(labelText: "Téléphone"),
                 ),
 
                 TextFormField(
                   controller: pickup,
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration:
                       const InputDecoration(labelText: "Adresse départ"),
                 ),
 
                 TextFormField(
                   controller: drop,
-                  validator: (v) => v!.isEmpty ? "Champ obligatoire" : null,
+                  validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration:
                       const InputDecoration(labelText: "Adresse destination"),
                 ),
 
-                TextFormField(
-                  controller: flight,
-                  decoration:
-                      const InputDecoration(labelText: "Numéro de vol"),
-                ),
-
-                TextFormField(
-                  controller: persons,
-                  keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: "Nombre de personnes"),
-                ),
-
-                TextFormField(
-                  controller: bags,
-                  keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: "Nombre de bagages"),
-                ),
-
-                TextFormField(
-                  controller: others,
-                  decoration: const InputDecoration(labelText: "Autres"),
-                ),
-
                 const SizedBox(height: 10),
 
+                /// DRIVER SELECT
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
-                    if (!s.hasData) return const Text("Chargement...");
+                    if (!s.hasData) {
+                      return const CircularProgressIndicator();
+                    }
+
                     final drivers = s.data!.docs;
-                    if (drivers.isEmpty) return const Text("Aucun chauffeur");
+
+                    if (drivers.isEmpty) {
+                      return const Text("Aucun chauffeur");
+                    }
 
                     return DropdownButtonFormField(
                       value: selectedDriver,
                       decoration: const InputDecoration(
                           labelText: "Sélectionner un chauffeur"),
                       items: drivers.map((d) {
-                        final name = (d["name"] ?? "Sans nom").toString();
                         return DropdownMenuItem(
-                            value: d.id, child: Text(name));
+                          value: d.id,
+                          child: Text(d["name"] ?? "Sans nom"),
+                        );
                       }).toList(),
                       onChanged: (v) => setState(() => selectedDriver = v),
                       validator: (v) => v == null ? "Obligatoire" : null,
@@ -225,8 +219,6 @@ class _AdminPageState extends State<AdminPage> {
                     child: const Text("Assigner la course"),
                   ),
                 ),
-
-                const SizedBox(height: 10),
 
                 Center(
                   child: TextButton(
@@ -244,18 +236,21 @@ class _AdminPageState extends State<AdminPage> {
 
                 const SizedBox(height: 30),
 
-                const Text("Gérer les chauffeurs",
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                // ───────────── DRIVER MANAGEMENT ─────────────
+                const Text(
+                  "Gérer les chauffeurs",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
 
                 const SizedBox(height: 10),
 
                 TextField(
                   controller: searchController,
-                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      labelText: "Rechercher"),
+                    prefixIcon: Icon(Icons.search),
+                    labelText: "Rechercher",
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
 
                 const SizedBox(height: 10),
@@ -285,31 +280,35 @@ class _AdminPageState extends State<AdminPage> {
 
                     return Column(
                       children: docs.map<Widget>((d) {
-                        final name = (d["name"] ?? "Sans nom").toString();
+                        final name = d["name"] ?? "Sans nom";
 
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.person),
                             title: Text(name),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.red),
                               onPressed: () {
                                 showDialog(
                                   context: context,
                                   builder: (_) => AlertDialog(
                                     title: const Text("Supprimer ?"),
-                                    content: Text("Supprimer $name ?"),
+                                    content: Text(
+                                        "Supprimer le chauffeur $name ?"),
                                     actions: [
                                       TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                          child: const Text("Annuler")),
+                                        onPressed: () =>
+                                            Navigator.pop(context),
+                                        child: const Text("Annuler"),
+                                      ),
                                       TextButton(
-                                          onPressed: () {
-                                            Navigator.pop(context);
-                                            deleteDriver(d.id);
-                                          },
-                                          child: const Text("Supprimer")),
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          deleteDriver(d.id);
+                                        },
+                                        child: const Text("Supprimer"),
+                                      ),
                                     ],
                                   ),
                                 );
@@ -324,6 +323,74 @@ class _AdminPageState extends State<AdminPage> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ───────────────── FOOTER ─────────────────
+  Widget _footer() {
+    return Container(
+      height: 80,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 6,
+            color: Colors.black.withOpacity(0.15),
+          )
+        ],
+      ),
+      child: Row(
+        children: [
+          _footerItem("À venir", "assigné", Colors.blue),
+          _footerItem("En cours", "démarré", Colors.orange),
+          _footerItem("Terminées", "terminé", Colors.green),
+        ],
+      ),
+    );
+  }
+
+  Widget _footerItem(String label, String status, Color color) {
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => RidesByStatusPage(
+                status: status,
+                title: label,
+                color: color,
+              ),
+            ),
+          );
+        },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label,
+                style:
+                    TextStyle(fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 4),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection("rides")
+                  .where("status", isEqualTo: status)
+                  .snapshots(),
+              builder: (context, s) {
+                if (!s.hasData) return const Text("-");
+                return Text(
+                  s.data!.docs.length.toString(),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
