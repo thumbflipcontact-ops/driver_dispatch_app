@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 class RidesByStatusPage extends StatelessWidget {
   final String status;
@@ -26,22 +27,14 @@ class RidesByStatusPage extends StatelessWidget {
             .where("status", isEqualTo: status)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(
-              child: Text("Erreur de chargement des courses"),
-            );
-          }
-
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           DateTime now = DateTime.now();
-          List<QueryDocumentSnapshot> rides = snapshot.data!.docs;
+          List<QueryDocumentSnapshot> rides = snapshot.data!.docs.toList();
 
-          // ─────────────────────────────────────────
-          // UPCOMING = status assigné + date >= now
-          // ─────────────────────────────────────────
+          // ✅ UPCOMING = assigné + date >= now
           if (status == "assigné") {
             rides = rides.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
@@ -49,8 +42,7 @@ class RidesByStatusPage extends StatelessWidget {
               if (ts == null) return false;
 
               final date = ts.toDate();
-              return date.isAfter(now) ||
-                  date.isAtSameMomentAs(now);
+              return date.isAfter(now) || date.isAtSameMomentAs(now);
             }).toList();
           }
 
@@ -58,9 +50,7 @@ class RidesByStatusPage extends StatelessWidget {
             return const Center(child: Text("Aucune course"));
           }
 
-          // ─────────────────────────────────────────
-          // SAME SORTING AS AssignedRidesPage
-          // ─────────────────────────────────────────
+          // SAME SORTING
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
@@ -92,8 +82,6 @@ class RidesByStatusPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-
-                      /// HEADER
                       Text(
                         data["passengerName"] ?? "Client",
                         style: const TextStyle(
@@ -101,25 +89,16 @@ class RidesByStatusPage extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-
                       const SizedBox(height: 6),
 
-                      Text(
-                          "Téléphone : ${data["passengerPhone"] ?? "-"}"),
-                      Text(
-                          "Heure : ${data["pickupDateTimeText"] ?? "-"}"),
-                      Text(
-                          "Adresse départ : ${data["pickupLocation"] ?? "-"}"),
-                      Text(
-                          "Adresse destination : ${data["dropLocation"] ?? "-"}"),
-                      Text(
-                          "Numéro de vol : ${data["flightNumber"] ?? "-"}"),
-                      Text(
-                          "Nombre de personnes : ${data["personsCount"] ?? "-"}"),
-                      Text(
-                          "Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
-                      Text(
-                          "Autres notes : ${data["otherNotes"] ?? "-"}"),
+                      Text("Téléphone : ${data["passengerPhone"] ?? "-"}"),
+                      Text("Heure : ${data["pickupDateTimeText"] ?? "-"}"),
+                      Text("Adresse départ : ${data["pickupLocation"] ?? "-"}"),
+                      Text("Adresse destination : ${data["dropLocation"] ?? "-"}"),
+                      Text("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
+                      Text("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
+                      Text("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
+                      Text("Autres notes : ${data["otherNotes"] ?? "-"}"),
 
                       const SizedBox(height: 6),
 
@@ -128,16 +107,30 @@ class RidesByStatusPage extends StatelessWidget {
 
                       const SizedBox(height: 8),
 
-                      /// DELETE ACTION (ALL STATUSES)
                       Align(
                         alignment: Alignment.centerRight,
-                        child: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            await FirebaseFirestore.instance
-                                .collection("rides")
-                                .doc(ride.id)
-                                .delete();
+                        child: PopupMenuButton<String>(
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: "edit",
+                              child: Text("Modifier"),
+                            ),
+                            PopupMenuItem(
+                              value: "delete",
+                              child: Text("Supprimer"),
+                            ),
+                          ],
+                          onSelected: (val) async {
+                            if (val == "delete") {
+                              await FirebaseFirestore.instance
+                                  .collection("rides")
+                                  .doc(ride.id)
+                                  .delete();
+                            }
+
+                            if (val == "edit") {
+                              _showEditRideDialog(context, ride.id, data);
+                            }
                           },
                         ),
                       ),
@@ -152,9 +145,156 @@ class RidesByStatusPage extends StatelessWidget {
     );
   }
 
-  // ─────────────────────────────────────────
+  // ─────────────────────────────
+  // EDIT RIDE DIALOG (ALL FIELDS)
+  // ─────────────────────────────
+  void _showEditRideDialog(
+    BuildContext context,
+    String rideId,
+    Map<String, dynamic> data,
+  ) {
+    final passenger = TextEditingController(text: data["passengerName"] ?? "");
+    final phone = TextEditingController(text: data["passengerPhone"] ?? "");
+    final pickup = TextEditingController(text: data["pickupLocation"] ?? "");
+    final drop = TextEditingController(text: data["dropLocation"] ?? "");
+    final flight = TextEditingController(text: data["flightNumber"] ?? "");
+    final persons = TextEditingController(text: data["personsCount"] ?? "");
+    final bags = TextEditingController(text: data["bagsCount"] ?? "");
+    final others = TextEditingController(text: data["otherNotes"] ?? "");
+
+    DateTime? pickedDateTime;
+    final Timestamp? ts = data["pickupDateTimeUtc"];
+    if (ts != null) pickedDateTime = ts.toDate();
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setLocal) {
+            Future<void> pickDateTime() async {
+              final d = await showDatePicker(
+                context: context,
+                initialDate: pickedDateTime ?? DateTime.now(),
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2100),
+              );
+              if (d == null) return;
+
+              final t = await showTimePicker(
+                context: context,
+                initialTime: pickedDateTime == null
+                    ? TimeOfDay.now()
+                    : TimeOfDay.fromDateTime(pickedDateTime!),
+              );
+              if (t == null) return;
+
+              setLocal(() {
+                pickedDateTime =
+                    DateTime(d.year, d.month, d.day, t.hour, t.minute);
+              });
+            }
+
+            return AlertDialog(
+              title: const Text("Modifier la course"),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    InkWell(
+                      onTap: pickDateTime,
+                      child: InputDecorator(
+                        decoration:
+                            const InputDecoration(labelText: "Date & Heure"),
+                        child: Text(
+                          pickedDateTime == null
+                              ? "Sélectionner"
+                              : DateFormat("dd/MM/yyyy HH:mm")
+                                  .format(pickedDateTime!),
+                        ),
+                      ),
+                    ),
+                    TextField(
+                      controller: passenger,
+                      decoration: const InputDecoration(labelText: "Client"),
+                    ),
+                    TextField(
+                      controller: phone,
+                      decoration: const InputDecoration(labelText: "Téléphone"),
+                    ),
+                    TextField(
+                      controller: pickup,
+                      decoration:
+                          const InputDecoration(labelText: "Adresse départ"),
+                    ),
+                    TextField(
+                      controller: drop,
+                      decoration: const InputDecoration(
+                          labelText: "Adresse destination"),
+                    ),
+                    TextField(
+                      controller: flight,
+                      decoration:
+                          const InputDecoration(labelText: "Numéro de vol"),
+                    ),
+                    TextField(
+                      controller: persons,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: "Nombre de personnes"),
+                    ),
+                    TextField(
+                      controller: bags,
+                      keyboardType: TextInputType.number,
+                      decoration:
+                          const InputDecoration(labelText: "Nombre de bagages"),
+                    ),
+                    TextField(
+                      controller: others,
+                      decoration: const InputDecoration(labelText: "Autres"),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Annuler"),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    await FirebaseFirestore.instance
+                        .collection("rides")
+                        .doc(rideId)
+                        .update({
+                      "passengerName": passenger.text.trim(),
+                      "passengerPhone": phone.text.trim(),
+                      "pickupLocation": pickup.text.trim(),
+                      "dropLocation": drop.text.trim(),
+                      "flightNumber": flight.text.trim(),
+                      "personsCount": persons.text.trim(),
+                      "bagsCount": bags.text.trim(),
+                      "otherNotes": others.text.trim(),
+                      if (pickedDateTime != null)
+                        "pickupDateTimeUtc": pickedDateTime,
+                      if (pickedDateTime != null)
+                        "pickupDateTimeText": DateFormat("dd/MM/yyyy HH:mm")
+                            .format(pickedDateTime!),
+                    });
+
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Enregistrer"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ─────────────────────────────
   // DRIVER NAME RESOLUTION
-  // ─────────────────────────────────────────
+  // ─────────────────────────────
   Widget _driverNameWidget(String? driverId) {
     if (driverId == null) {
       return const Text("Chauffeur : Non assigné");
