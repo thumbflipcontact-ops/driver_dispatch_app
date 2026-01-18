@@ -76,17 +76,18 @@ class DriverPage extends StatelessWidget {
         .showSnackBar(const SnackBar(content: Text("Course retirée")));
   }
 
-  // ✅ Helper: Selectable text everywhere
-  Widget _sText(String text,
-      {TextStyle? style, int? maxLines, TextAlign? textAlign}) {
-    return SelectableText(
-      text,
-      style: style,
-      maxLines: maxLines,
-      textAlign: textAlign,
-      // Lets user copy easily
-      toolbarOptions: const ToolbarOptions(copy: true, selectAll: true),
-    );
+  // ✅ One block of copyable text for a ride (multi-line selectable)
+  String _rideCopyBlock(Map<String, dynamic> data) {
+    return "Date & Heure : ${data["pickupDateTimeText"] ?? "-"}\n"
+        "Client : ${data["passengerName"] ?? "-"}\n"
+        "Téléphone : ${data["passengerPhone"] ?? "-"}\n"
+        "Départ : ${data["pickupLocation"] ?? "-"}\n"
+        "Destination : ${data["dropLocation"] ?? "-"}\n"
+        "Numéro de vol : ${data["flightNumber"] ?? "-"}\n"
+        "Nombre de personnes : ${data["personsCount"] ?? "-"}\n"
+        "Nombre de bagages : ${data["bagsCount"] ?? "-"}\n"
+        "Autres notes : ${data["otherNotes"] ?? "-"}\n"
+        "Statut : ${data["status"] ?? "-"}";
   }
 
   @override
@@ -196,24 +197,13 @@ class DriverPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _sText(
-              "Date & Heure : ${data["pickupDateTimeText"] ?? ""}",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            // ✅ ONE selectable block: driver can select multiple lines
+            SelectableText(
+              _rideCopyBlock(data),
+              toolbarOptions:
+                  const ToolbarOptions(copy: true, selectAll: true),
+              style: const TextStyle(fontSize: 14),
             ),
-
-            const SizedBox(height: 8),
-
-            _sText("Client : ${data["passengerName"] ?? ""}"),
-            _sText("Téléphone : ${data["passengerPhone"] ?? ""}"),
-            _sText("Départ : ${data["pickupLocation"] ?? ""}"),
-            _sText("Destination : ${data["dropLocation"] ?? ""}"),
-            _sText("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
-            _sText("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
-            _sText("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
-            _sText("Autres notes : ${data["otherNotes"] ?? "-"}"),
-
-            const SizedBox(height: 8),
-            _sText("Statut : ${data["status"] ?? ""}"),
 
             const SizedBox(height: 12),
 
@@ -252,15 +242,12 @@ class DriverPage extends StatelessWidget {
     return Card(
       color: Colors.grey.shade100,
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: ListTile(
-        title: _sText(
-          (data["passengerName"] ?? "").toString(),
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: _sText(
-          "Date : ${data["pickupDateTimeText"] ?? ""}\n"
-          "Vol : ${data["flightNumber"] ?? "-"}\n"
-          "Statut : ${data["status"] ?? ""}",
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: SelectableText(
+          _rideCopyBlock(data),
+          toolbarOptions: const ToolbarOptions(copy: true, selectAll: true),
+          style: const TextStyle(fontSize: 14),
         ),
       ),
     );

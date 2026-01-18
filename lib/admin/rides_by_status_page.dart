@@ -14,22 +14,24 @@ class RidesByStatusPage extends StatelessWidget {
     required this.color,
   }) : super(key: key);
 
-  // ✅ helper: selectable + copyable text
-  Widget _sText(String text, {TextStyle? style}) {
-    return SelectableText(
-      text,
-      style: style,
-      toolbarOptions: const ToolbarOptions(copy: true, selectAll: true),
-    );
+  String _rideCopyBlock(Map<String, dynamic> data, String driverLine) {
+    return "Client : ${data["passengerName"] ?? "-"}\n"
+        "Téléphone : ${data["passengerPhone"] ?? "-"}\n"
+        "Heure : ${data["pickupDateTimeText"] ?? "-"}\n"
+        "Adresse départ : ${data["pickupLocation"] ?? "-"}\n"
+        "Adresse destination : ${data["dropLocation"] ?? "-"}\n"
+        "Numéro de vol : ${data["flightNumber"] ?? "-"}\n"
+        "Nombre de personnes : ${data["personsCount"] ?? "-"}\n"
+        "Nombre de bagages : ${data["bagsCount"] ?? "-"}\n"
+        "Autres notes : ${data["otherNotes"] ?? "-"}\n"
+        "Statut : ${data["status"] ?? "-"}\n"
+        "$driverLine";
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: color,
-      ),
+      appBar: AppBar(title: Text(title), backgroundColor: color),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection("rides")
@@ -43,13 +45,11 @@ class RidesByStatusPage extends StatelessWidget {
           DateTime now = DateTime.now();
           List<QueryDocumentSnapshot> rides = snapshot.data!.docs.toList();
 
-          // ✅ UPCOMING = assigné + date >= now
           if (status == "assigné") {
             rides = rides.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
               final Timestamp? ts = data["pickupDateTimeUtc"];
               if (ts == null) return false;
-
               final date = ts.toDate();
               return date.isAfter(now) || date.isAtSameMomentAs(now);
             }).toList();
@@ -59,7 +59,6 @@ class RidesByStatusPage extends StatelessWidget {
             return const Center(child: Text("Aucune course"));
           }
 
-          // SAME SORTING
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
@@ -91,31 +90,35 @@ class RidesByStatusPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _sText(
-                        (data["passengerName"] ?? "Client").toString(),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      // ✅ ONE BLOCK = multi-line copy works
+                      if (driverId == null)
+                        SelectableText(
+                          _rideCopyBlock(data, "Chauffeur : Non assigné"),
+                          toolbarOptions: const ToolbarOptions(
+                              copy: true, selectAll: true),
+                        )
+                      else
+                        StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection("users")
+                              .doc(driverId)
+                              .snapshots(),
+                          builder: (context, snap) {
+                            String driverLine = "Chauffeur : Inconnu";
+                            if (snap.hasData && snap.data!.exists) {
+                              final d =
+                                  snap.data!.data() as Map<String, dynamic>;
+                              driverLine =
+                                  "Chauffeur : ${d["name"] ?? "Sans nom"}";
+                            }
+
+                            return SelectableText(
+                              _rideCopyBlock(data, driverLine),
+                              toolbarOptions: const ToolbarOptions(
+                                  copy: true, selectAll: true),
+                            );
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      _sText("Téléphone : ${data["passengerPhone"] ?? "-"}"),
-                      _sText("Heure : ${data["pickupDateTimeText"] ?? "-"}"),
-                      _sText("Adresse départ : ${data["pickupLocation"] ?? "-"}"),
-                      _sText(
-                          "Adresse destination : ${data["dropLocation"] ?? "-"}"),
-                      _sText("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
-                      _sText(
-                          "Nombre de personnes : ${data["personsCount"] ?? "-"}"),
-                      _sText(
-                          "Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
-                      _sText("Autres notes : ${data["otherNotes"] ?? "-"}"),
-
-                      const SizedBox(height: 6),
-
-                      _sText("Statut : ${data["status"] ?? "-"}"),
-                      _driverNameWidget(driverId),
 
                       const SizedBox(height: 8),
 
@@ -123,14 +126,8 @@ class RidesByStatusPage extends StatelessWidget {
                         alignment: Alignment.centerRight,
                         child: PopupMenuButton<String>(
                           itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: "edit",
-                              child: Text("Modifier"),
-                            ),
-                            PopupMenuItem(
-                              value: "delete",
-                              child: Text("Supprimer"),
-                            ),
+                            PopupMenuItem(value: "edit", child: Text("Modifier")),
+                            PopupMenuItem(value: "delete", child: Text("Supprimer")),
                           ],
                           onSelected: (val) async {
                             if (val == "delete") {
@@ -157,14 +154,8 @@ class RidesByStatusPage extends StatelessWidget {
     );
   }
 
-  // ─────────────────────────────
-  // EDIT RIDE DIALOG (ALL FIELDS)
-  // ─────────────────────────────
   void _showEditRideDialog(
-    BuildContext context,
-    String rideId,
-    Map<String, dynamic> data,
-  ) {
+      BuildContext context, String rideId, Map<String, dynamic> data) {
     final passenger = TextEditingController(text: data["passengerName"] ?? "");
     final phone = TextEditingController(text: data["passengerPhone"] ?? "");
     final pickup = TextEditingController(text: data["pickupLocation"] ?? "");
@@ -300,32 +291,6 @@ class RidesByStatusPage extends StatelessWidget {
             );
           },
         );
-      },
-    );
-  }
-
-  // ─────────────────────────────
-  // DRIVER NAME RESOLUTION (Selectable)
-  // ─────────────────────────────
-  Widget _driverNameWidget(String? driverId) {
-    if (driverId == null) {
-      return _sText("Chauffeur : Non assigné");
-    }
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection("users")
-          .doc(driverId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return _sText("Chauffeur : Inconnu");
-        }
-
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        final name = data["name"] ?? "Sans nom";
-
-        return _sText("Chauffeur : $name");
       },
     );
   }
