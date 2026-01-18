@@ -38,28 +38,20 @@ class DriverPage extends StatelessWidget {
   startRide(BuildContext context, DocumentSnapshot ride) async {
     final now = DateTime.now();
 
-    await FirebaseFirestore.instance
-        .collection("rides")
-        .doc(ride.id)
-        .update({
+    await FirebaseFirestore.instance.collection("rides").doc(ride.id).update({
       "status": statusStarted,
       "startTimeUtc": now,
-      "startTimeText":
-          DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now),
+      "startTimeText": DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now),
     });
   }
 
   finishRide(DocumentSnapshot ride) async {
     final now = DateTime.now();
 
-    await FirebaseFirestore.instance
-        .collection("rides")
-        .doc(ride.id)
-        .update({
+    await FirebaseFirestore.instance.collection("rides").doc(ride.id).update({
       "status": statusCompleted,
       "finishTimeUtc": now,
-      "finishTimeText":
-          DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now),
+      "finishTimeText": DateFormat("dd/MM/yyyy HH:mm", "fr_FR").format(now),
     });
   }
 
@@ -69,23 +61,32 @@ class DriverPage extends StatelessWidget {
     if (data["status"] != statusAssigned) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text("Impossible de supprimer une course déjà démarrée"),
+          content: Text("Impossible de supprimer une course déjà démarrée"),
         ),
       );
       return;
     }
 
-    await FirebaseFirestore.instance
-        .collection("rides")
-        .doc(ride.id)
-        .update({
+    await FirebaseFirestore.instance.collection("rides").doc(ride.id).update({
       "assignedDriverId": null,
       "status": statusUnassigned,
     });
 
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text("Course retirée")));
+  }
+
+  // ✅ Helper: Selectable text everywhere
+  Widget _sText(String text,
+      {TextStyle? style, int? maxLines, TextAlign? textAlign}) {
+    return SelectableText(
+      text,
+      style: style,
+      maxLines: maxLines,
+      textAlign: textAlign,
+      // Lets user copy easily
+      toolbarOptions: const ToolbarOptions(copy: true, selectAll: true),
+    );
   }
 
   @override
@@ -115,8 +116,7 @@ class DriverPage extends StatelessWidget {
           List<DocumentSnapshot> rides = snapshot.data!.docs;
 
           if (rides.isEmpty) {
-            return const Center(
-                child: Text("Aucune course assignée."));
+            return const Center(child: Text("Aucune course assignée."));
           }
 
           /// ✅ Always sorted by pickup time (old + new rides)
@@ -143,13 +143,11 @@ class DriverPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 const Padding(
                   padding: EdgeInsets.all(12),
                   child: Text(
                     "Courses Actives",
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
 
@@ -159,15 +157,13 @@ class DriverPage extends StatelessWidget {
                     child: Text("Aucune course active."),
                   ),
 
-                ...activeRides.map(
-                    (ride) => _activeRideCard(context, ride)),
+                ...activeRides.map((ride) => _activeRideCard(context, ride)),
 
                 const Padding(
                   padding: EdgeInsets.all(12),
                   child: Text(
                     "Historique des courses",
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
 
@@ -200,39 +196,36 @@ class DriverPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            _sText(
               "Date & Heure : ${data["pickupDateTimeText"] ?? ""}",
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
 
             const SizedBox(height: 8),
 
-            Text("Client : ${data["passengerName"] ?? ""}"),
-            Text("Téléphone : ${data["passengerPhone"] ?? ""}"),
-            Text("Départ : ${data["pickupLocation"] ?? ""}"),
-            Text("Destination : ${data["dropLocation"] ?? ""}"),
-            Text("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
-            Text("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
-            Text("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
-            Text("Autres notes : ${data["otherNotes"] ?? "-"}"),
+            _sText("Client : ${data["passengerName"] ?? ""}"),
+            _sText("Téléphone : ${data["passengerPhone"] ?? ""}"),
+            _sText("Départ : ${data["pickupLocation"] ?? ""}"),
+            _sText("Destination : ${data["dropLocation"] ?? ""}"),
+            _sText("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
+            _sText("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
+            _sText("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
+            _sText("Autres notes : ${data["otherNotes"] ?? "-"}"),
 
             const SizedBox(height: 8),
-            Text("Statut : ${data["status"]}"),
+            _sText("Statut : ${data["status"] ?? ""}"),
 
             const SizedBox(height: 12),
 
             Row(
               children: [
                 ElevatedButton(
-                  onPressed:
-                      canStart ? () => startRide(context, ride) : null,
+                  onPressed: canStart ? () => startRide(context, ride) : null,
                   child: const Text("Démarrer"),
                 ),
                 const SizedBox(width: 10),
                 ElevatedButton(
-                  onPressed:
-                      canFinish ? () => finishRide(ride) : null,
+                  onPressed: canFinish ? () => finishRide(ride) : null,
                   child: const Text("Terminer"),
                 ),
               ],
@@ -260,11 +253,14 @@ class DriverPage extends StatelessWidget {
       color: Colors.grey.shade100,
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: ListTile(
-        title: Text(data["passengerName"] ?? ""),
-        subtitle: Text(
+        title: _sText(
+          (data["passengerName"] ?? "").toString(),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: _sText(
           "Date : ${data["pickupDateTimeText"] ?? ""}\n"
           "Vol : ${data["flightNumber"] ?? "-"}\n"
-          "Statut : ${data["status"]}",
+          "Statut : ${data["status"] ?? ""}",
         ),
       ),
     );

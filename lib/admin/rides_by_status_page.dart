@@ -14,6 +14,15 @@ class RidesByStatusPage extends StatelessWidget {
     required this.color,
   }) : super(key: key);
 
+  // ✅ helper: selectable + copyable text
+  Widget _sText(String text, {TextStyle? style}) {
+    return SelectableText(
+      text,
+      style: style,
+      toolbarOptions: const ToolbarOptions(copy: true, selectAll: true),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,8 +91,8 @@ class RidesByStatusPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        data["passengerName"] ?? "Client",
+                      _sText(
+                        (data["passengerName"] ?? "Client").toString(),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -91,18 +100,21 @@ class RidesByStatusPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
 
-                      Text("Téléphone : ${data["passengerPhone"] ?? "-"}"),
-                      Text("Heure : ${data["pickupDateTimeText"] ?? "-"}"),
-                      Text("Adresse départ : ${data["pickupLocation"] ?? "-"}"),
-                      Text("Adresse destination : ${data["dropLocation"] ?? "-"}"),
-                      Text("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
-                      Text("Nombre de personnes : ${data["personsCount"] ?? "-"}"),
-                      Text("Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
-                      Text("Autres notes : ${data["otherNotes"] ?? "-"}"),
+                      _sText("Téléphone : ${data["passengerPhone"] ?? "-"}"),
+                      _sText("Heure : ${data["pickupDateTimeText"] ?? "-"}"),
+                      _sText("Adresse départ : ${data["pickupLocation"] ?? "-"}"),
+                      _sText(
+                          "Adresse destination : ${data["dropLocation"] ?? "-"}"),
+                      _sText("Numéro de vol : ${data["flightNumber"] ?? "-"}"),
+                      _sText(
+                          "Nombre de personnes : ${data["personsCount"] ?? "-"}"),
+                      _sText(
+                          "Nombre de bagages : ${data["bagsCount"] ?? "-"}"),
+                      _sText("Autres notes : ${data["otherNotes"] ?? "-"}"),
 
                       const SizedBox(height: 6),
 
-                      Text("Statut : ${data["status"] ?? "-"}"),
+                      _sText("Statut : ${data["status"] ?? "-"}"),
                       _driverNameWidget(driverId),
 
                       const SizedBox(height: 8),
@@ -293,11 +305,11 @@ class RidesByStatusPage extends StatelessWidget {
   }
 
   // ─────────────────────────────
-  // DRIVER NAME RESOLUTION
+  // DRIVER NAME RESOLUTION (Selectable)
   // ─────────────────────────────
   Widget _driverNameWidget(String? driverId) {
     if (driverId == null) {
-      return const Text("Chauffeur : Non assigné");
+      return _sText("Chauffeur : Non assigné");
     }
 
     return StreamBuilder<DocumentSnapshot>(
@@ -307,13 +319,13 @@ class RidesByStatusPage extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Text("Chauffeur : Inconnu");
+          return _sText("Chauffeur : Inconnu");
         }
 
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final name = data["name"] ?? "Sans nom";
 
-        return Text("Chauffeur : $name");
+        return _sText("Chauffeur : $name");
       },
     );
   }

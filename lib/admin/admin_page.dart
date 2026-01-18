@@ -29,6 +29,15 @@ class _AdminPageState extends State<AdminPage> {
 
   final formKey = GlobalKey<FormState>();
 
+  // ✅ helper for copyable/selectable text
+  Widget _sText(String text, {TextStyle? style}) {
+    return SelectableText(
+      text,
+      style: style,
+      toolbarOptions: const ToolbarOptions(copy: true, selectAll: true),
+    );
+  }
+
   // ───────────────── AUTH ─────────────────
   Future<void> logout() async {
     await FirebaseAuth.instance.signOut();
@@ -123,9 +132,7 @@ class _AdminPageState extends State<AdminPage> {
           IconButton(onPressed: logout, icon: const Icon(Icons.logout))
         ],
       ),
-
       bottomNavigationBar: _footer(),
-
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
@@ -134,12 +141,10 @@ class _AdminPageState extends State<AdminPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 InkWell(
                   onTap: selectDateTime,
                   child: InputDecorator(
-                    decoration:
-                        const InputDecoration(labelText: "Date & Heure"),
+                    decoration: const InputDecoration(labelText: "Date & Heure"),
                     child: Text(
                       pickupDateTime == null
                           ? "Sélectionner"
@@ -177,8 +182,7 @@ class _AdminPageState extends State<AdminPage> {
 
                 TextFormField(
                   controller: flight,
-                  decoration:
-                      const InputDecoration(labelText: "Numéro de vol"),
+                  decoration: const InputDecoration(labelText: "Numéro de vol"),
                 ),
 
                 TextFormField(
@@ -258,8 +262,7 @@ class _AdminPageState extends State<AdminPage> {
 
                 const Text(
                   "Gérer les chauffeurs",
-                  style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 10),
@@ -285,8 +288,7 @@ class _AdminPageState extends State<AdminPage> {
                     List docs = s.data!.docs;
 
                     if (searchController.text.isNotEmpty) {
-                      final key =
-                          searchController.text.toLowerCase().trim();
+                      final key = searchController.text.toLowerCase().trim();
                       docs = docs.where((d) {
                         final name =
                             (d["name"] ?? "").toString().toLowerCase();
@@ -305,17 +307,16 @@ class _AdminPageState extends State<AdminPage> {
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.person),
-                            title: Text(name),
+                            title: _sText(name.toString()), // ✅ copyable
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete,
-                                  color: Colors.red),
+                              icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () {
                                 showDialog(
                                   context: context,
                                   builder: (_) => AlertDialog(
                                     title: const Text("Supprimer ?"),
-                                    content: Text(
-                                        "Supprimer le chauffeur $name ?"),
+                                    content:
+                                        Text("Supprimer le chauffeur $name ?"),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
@@ -389,9 +390,10 @@ class _AdminPageState extends State<AdminPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(label,
-                style:
-                    TextStyle(fontWeight: FontWeight.bold, color: color)),
+            _sText(
+              label,
+              style: TextStyle(fontWeight: FontWeight.bold, color: color),
+            ),
             const SizedBox(height: 4),
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -409,12 +411,11 @@ class _AdminPageState extends State<AdminPage> {
                     final ts = d["pickupDateTimeUtc"];
                     if (ts == null) return false;
                     final date = ts.toDate();
-                    return date.isAfter(now) ||
-                        date.isAtSameMomentAs(now);
+                    return date.isAfter(now) || date.isAtSameMomentAs(now);
                   }).toList();
                 }
 
-                return Text(
+                return _sText(
                   docs.length.toString(),
                   style: TextStyle(
                     fontSize: 18,
