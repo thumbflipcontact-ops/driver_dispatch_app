@@ -59,7 +59,7 @@ class AssignedRidesPage extends StatelessWidget {
             return const Center(child: Text("Aucune course"));
           }
 
-          /// ✅ NEW SORT: pickup datetime DESC (latest first)
+          /// ✅ SORT: pickup datetime ASC (soonest first)
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
@@ -71,7 +71,7 @@ class AssignedRidesPage extends StatelessWidget {
             if (aTime == null) return 1; // nulls go bottom
             if (bTime == null) return -1;
 
-            return bTime.compareTo(aTime); // ✅ DESC
+            return aTime.compareTo(bTime); // ✅ ASC
           });
 
           return ListView.builder(
