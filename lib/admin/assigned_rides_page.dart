@@ -6,9 +6,25 @@ class AssignedRidesPage extends StatelessWidget {
   const AssignedRidesPage({Key? key}) : super(key: key);
 
   final String statusAssigned = "assigné";
-  final String statusStarted = "démarré";
-  final String statusCompleted = "terminé";
   final String statusUnassigned = "non assigné";
+
+  /// ✅ Safely resolve pickup date for correct sorting (new + old rides)
+  DateTime? _getPickupDateTime(Map<String, dynamic> data) {
+    final raw = data["pickupDateTimeUtc"];
+
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is DateTime) return raw;
+
+    final text = data["pickupDateTimeText"];
+    if (text is String && text.isNotEmpty) {
+      try {
+        return DateFormat("dd/MM/yyyy HH:mm").parse(text);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
 
   String _rideCopyBlock(Map<String, dynamic> data, String driverLine) {
     return "Client : ${data["passengerName"] ?? "-"}\n"
@@ -19,6 +35,7 @@ class AssignedRidesPage extends StatelessWidget {
         "Numéro de vol : ${data["flightNumber"] ?? "-"}\n"
         "Nombre de personnes : ${data["personsCount"] ?? "-"}\n"
         "Nombre de bagages : ${data["bagsCount"] ?? "-"}\n"
+        "Tarif : ${data["tarif"] ?? "-"}\n"
         "Autres notes : ${data["otherNotes"] ?? "-"}\n"
         "Statut : ${data["status"] ?? "-"}\n"
         "$driverLine";
@@ -42,21 +59,19 @@ class AssignedRidesPage extends StatelessWidget {
             return const Center(child: Text("Aucune course"));
           }
 
-          /// ✅ SAME SORTING LOGIC (recent -> old)
+          /// ✅ NEW SORT: pickup datetime DESC (latest first)
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
 
-            final Timestamp? aTime =
-                aData["assignedAt"] ?? aData["pickupDateTimeUtc"];
-            final Timestamp? bTime =
-                bData["assignedAt"] ?? bData["pickupDateTimeUtc"];
+            final aTime = _getPickupDateTime(aData);
+            final bTime = _getPickupDateTime(bData);
 
             if (aTime == null && bTime == null) return 0;
-            if (aTime == null) return 1;
+            if (aTime == null) return 1; // nulls go bottom
             if (bTime == null) return -1;
 
-            return bTime.compareTo(aTime);
+            return bTime.compareTo(aTime); // ✅ DESC
           });
 
           return ListView.builder(
@@ -79,7 +94,7 @@ class AssignedRidesPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      /// ✅ ONE selectable block = multi-line selection works
+                      /// ✅ ONE selectable block (multi-line copy)
                       if (driverId == null)
                         SelectableText(
                           _rideCopyBlock(data, "Chauffeur : Non assigné"),
@@ -187,7 +202,7 @@ class AssignedRidesPage extends StatelessWidget {
   }
 
   // ─────────────────────────────
-  // EDIT RIDE DIALOG (ALL FIELDS)
+  // EDIT RIDE DIALOG (ALL FIELDS + TARIF)
   // ─────────────────────────────
   void _showEditRideDialog(
     BuildContext context,
@@ -201,6 +216,7 @@ class AssignedRidesPage extends StatelessWidget {
     final flight = TextEditingController(text: data["flightNumber"] ?? "");
     final persons = TextEditingController(text: data["personsCount"] ?? "");
     final bags = TextEditingController(text: data["bagsCount"] ?? "");
+    final tarif = TextEditingController(text: data["tarif"] ?? "");
     final others = TextEditingController(text: data["otherNotes"] ?? "");
 
     DateTime? pickedDateTime;
@@ -289,6 +305,10 @@ class AssignedRidesPage extends StatelessWidget {
                           const InputDecoration(labelText: "Nombre de bagages"),
                     ),
                     TextField(
+                      controller: tarif,
+                      decoration: const InputDecoration(labelText: "Tarif"),
+                    ),
+                    TextField(
                       controller: others,
                       decoration: const InputDecoration(labelText: "Autres"),
                     ),
@@ -313,6 +333,7 @@ class AssignedRidesPage extends StatelessWidget {
                       "flightNumber": flight.text.trim(),
                       "personsCount": persons.text.trim(),
                       "bagsCount": bags.text.trim(),
+                      "tarif": tarif.text.trim(),
                       "otherNotes": others.text.trim(),
                       if (pickedDateTime != null)
                         "pickupDateTimeUtc": pickedDateTime,

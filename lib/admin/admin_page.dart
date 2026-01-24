@@ -22,6 +22,10 @@ class _AdminPageState extends State<AdminPage> {
   final persons = TextEditingController();
   final bags = TextEditingController();
   final others = TextEditingController();
+
+  // ✅ NEW
+  final tarif = TextEditingController();
+
   final searchController = TextEditingController();
 
   String? selectedDriver;
@@ -29,7 +33,6 @@ class _AdminPageState extends State<AdminPage> {
 
   final formKey = GlobalKey<FormState>();
 
-  // ✅ helper for copyable/selectable text
   Widget _sText(String text, {TextStyle? style}) {
     return SelectableText(
       text,
@@ -38,13 +41,11 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  // ───────────────── AUTH ─────────────────
   Future<void> logout() async {
     await FirebaseAuth.instance.signOut();
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
-  // ───────────────── STREAMS ─────────────────
   Stream<QuerySnapshot> driverStream() {
     return FirebaseFirestore.instance
         .collection("users")
@@ -52,7 +53,6 @@ class _AdminPageState extends State<AdminPage> {
         .snapshots();
   }
 
-  // ───────────────── DATE PICKER ─────────────────
   Future<void> selectDateTime() async {
     final d = await showDatePicker(
       context: context,
@@ -73,7 +73,6 @@ class _AdminPageState extends State<AdminPage> {
     });
   }
 
-  // ───────────────── ASSIGN RIDE ─────────────────
   Future<void> assignRide() async {
     if (!formKey.currentState!.validate() ||
         selectedDriver == null ||
@@ -98,6 +97,10 @@ class _AdminPageState extends State<AdminPage> {
       "personsCount": persons.text.trim(),
       "bagsCount": bags.text.trim(),
       "otherNotes": others.text.trim(),
+
+      // ✅ NEW FIELD
+      "tarif": tarif.text.trim(),
+
       "status": "assigné",
     });
 
@@ -109,20 +112,19 @@ class _AdminPageState extends State<AdminPage> {
     persons.clear();
     bags.clear();
     others.clear();
+    tarif.clear(); // ✅ NEW
     selectedDriver = null;
     pickupDateTime = null;
 
     setState(() {});
   }
 
-  // ───────────────── DELETE DRIVER ─────────────────
   Future<void> deleteDriver(String id) async {
     await FirebaseFirestore.instance.collection("users").doc(id).delete();
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text("Chauffeur supprimé")));
   }
 
-  // ───────────────── UI ─────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -153,45 +155,38 @@ class _AdminPageState extends State<AdminPage> {
                     ),
                   ),
                 ),
-
                 TextFormField(
                   controller: passenger,
                   validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration: const InputDecoration(labelText: "Client"),
                 ),
-
                 TextFormField(
                   controller: phone,
                   validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration: const InputDecoration(labelText: "Téléphone"),
                 ),
-
                 TextFormField(
                   controller: pickup,
                   validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration:
                       const InputDecoration(labelText: "Adresse départ"),
                 ),
-
                 TextFormField(
                   controller: drop,
                   validator: (v) => v!.isEmpty ? "Obligatoire" : null,
                   decoration:
                       const InputDecoration(labelText: "Adresse destination"),
                 ),
-
                 TextFormField(
                   controller: flight,
                   decoration: const InputDecoration(labelText: "Numéro de vol"),
                 ),
-
                 TextFormField(
                   controller: persons,
                   keyboardType: TextInputType.number,
                   decoration:
                       const InputDecoration(labelText: "Nombre de personnes"),
                 ),
-
                 TextFormField(
                   controller: bags,
                   keyboardType: TextInputType.number,
@@ -199,14 +194,18 @@ class _AdminPageState extends State<AdminPage> {
                       const InputDecoration(labelText: "Nombre de bagages"),
                 ),
 
+                // ✅ NEW TARIF FIELD
                 TextFormField(
-                  controller: others,
-                  decoration:
-                      const InputDecoration(labelText: "Autres notes"),
+                  controller: tarif,
+                  keyboardType: TextInputType.text,
+                  decoration: const InputDecoration(labelText: "Tarif"),
                 ),
 
+                TextFormField(
+                  controller: others,
+                  decoration: const InputDecoration(labelText: "Autres notes"),
+                ),
                 const SizedBox(height: 10),
-
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
@@ -234,16 +233,13 @@ class _AdminPageState extends State<AdminPage> {
                     );
                   },
                 ),
-
                 const SizedBox(height: 20),
-
                 Center(
                   child: ElevatedButton(
                     onPressed: assignRide,
                     child: const Text("Assigner la course"),
                   ),
                 ),
-
                 Center(
                   child: TextButton(
                     onPressed: () {
@@ -257,16 +253,12 @@ class _AdminPageState extends State<AdminPage> {
                     child: const Text("Voir les courses assignées"),
                   ),
                 ),
-
                 const SizedBox(height: 30),
-
                 const Text(
                   "Gérer les chauffeurs",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-
                 const SizedBox(height: 10),
-
                 TextField(
                   controller: searchController,
                   onChanged: (_) => setState(() {}),
@@ -275,9 +267,7 @@ class _AdminPageState extends State<AdminPage> {
                     labelText: "Rechercher",
                   ),
                 ),
-
                 const SizedBox(height: 10),
-
                 StreamBuilder<QuerySnapshot>(
                   stream: driverStream(),
                   builder: (context, s) {
@@ -307,7 +297,7 @@ class _AdminPageState extends State<AdminPage> {
                         return Card(
                           child: ListTile(
                             leading: const Icon(Icons.person),
-                            title: _sText(name.toString()), // ✅ copyable
+                            title: _sText(name.toString()),
                             trailing: IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () {
@@ -349,7 +339,6 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  // ───────────────── FOOTER ─────────────────
   Widget _footer() {
     return Container(
       height: 80,
@@ -390,10 +379,9 @@ class _AdminPageState extends State<AdminPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _sText(
-              label,
-              style: TextStyle(fontWeight: FontWeight.bold, color: color),
-            ),
+            _sText(label,
+                style:
+                    TextStyle(fontWeight: FontWeight.bold, color: color)),
             const SizedBox(height: 4),
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance

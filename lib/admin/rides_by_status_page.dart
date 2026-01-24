@@ -14,6 +14,24 @@ class RidesByStatusPage extends StatelessWidget {
     required this.color,
   }) : super(key: key);
 
+  /// ✅ Safely resolve pickup date for sorting (new + old rides)
+  DateTime? _getPickupDateTime(Map<String, dynamic> data) {
+    final raw = data["pickupDateTimeUtc"];
+
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is DateTime) return raw;
+
+    final text = data["pickupDateTimeText"];
+    if (text is String && text.isNotEmpty) {
+      try {
+        return DateFormat("dd/MM/yyyy HH:mm").parse(text);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   String _rideCopyBlock(Map<String, dynamic> data, String driverLine) {
     return "Client : ${data["passengerName"] ?? "-"}\n"
         "Téléphone : ${data["passengerPhone"] ?? "-"}\n"
@@ -23,6 +41,7 @@ class RidesByStatusPage extends StatelessWidget {
         "Numéro de vol : ${data["flightNumber"] ?? "-"}\n"
         "Nombre de personnes : ${data["personsCount"] ?? "-"}\n"
         "Nombre de bagages : ${data["bagsCount"] ?? "-"}\n"
+        "Tarif : ${data["tarif"] ?? "-"}\n"
         "Autres notes : ${data["otherNotes"] ?? "-"}\n"
         "Statut : ${data["status"] ?? "-"}\n"
         "$driverLine";
@@ -31,7 +50,10 @@ class RidesByStatusPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title), backgroundColor: color),
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: color,
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection("rides")
@@ -45,13 +67,13 @@ class RidesByStatusPage extends StatelessWidget {
           DateTime now = DateTime.now();
           List<QueryDocumentSnapshot> rides = snapshot.data!.docs.toList();
 
+          // ✅ UPCOMING = assigné + date >= now
           if (status == "assigné") {
             rides = rides.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
-              final Timestamp? ts = data["pickupDateTimeUtc"];
-              if (ts == null) return false;
-              final date = ts.toDate();
-              return date.isAfter(now) || date.isAtSameMomentAs(now);
+              final DateTime? dt = _getPickupDateTime(data);
+              if (dt == null) return false;
+              return dt.isAfter(now) || dt.isAtSameMomentAs(now);
             }).toList();
           }
 
@@ -59,14 +81,13 @@ class RidesByStatusPage extends StatelessWidget {
             return const Center(child: Text("Aucune course"));
           }
 
+          /// ✅ NEW SORT: pickup datetime DESC (latest first)
           rides.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;
 
-            final Timestamp? aTime =
-                aData["assignedAt"] ?? aData["pickupDateTimeUtc"];
-            final Timestamp? bTime =
-                bData["assignedAt"] ?? bData["pickupDateTimeUtc"];
+            final aTime = _getPickupDateTime(aData);
+            final bTime = _getPickupDateTime(bData);
 
             if (aTime == null && bTime == null) return 0;
             if (aTime == null) return 1;
@@ -90,12 +111,13 @@ class RidesByStatusPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ✅ ONE BLOCK = multi-line copy works
                       if (driverId == null)
                         SelectableText(
                           _rideCopyBlock(data, "Chauffeur : Non assigné"),
                           toolbarOptions: const ToolbarOptions(
-                              copy: true, selectAll: true),
+                            copy: true,
+                            selectAll: true,
+                          ),
                         )
                       else
                         StreamBuilder<DocumentSnapshot>(
@@ -115,7 +137,9 @@ class RidesByStatusPage extends StatelessWidget {
                             return SelectableText(
                               _rideCopyBlock(data, driverLine),
                               toolbarOptions: const ToolbarOptions(
-                                  copy: true, selectAll: true),
+                                copy: true,
+                                selectAll: true,
+                              ),
                             );
                           },
                         ),
@@ -126,8 +150,14 @@ class RidesByStatusPage extends StatelessWidget {
                         alignment: Alignment.centerRight,
                         child: PopupMenuButton<String>(
                           itemBuilder: (_) => const [
-                            PopupMenuItem(value: "edit", child: Text("Modifier")),
-                            PopupMenuItem(value: "delete", child: Text("Supprimer")),
+                            PopupMenuItem(
+                              value: "edit",
+                              child: Text("Modifier"),
+                            ),
+                            PopupMenuItem(
+                              value: "delete",
+                              child: Text("Supprimer"),
+                            ),
                           ],
                           onSelected: (val) async {
                             if (val == "delete") {
@@ -154,8 +184,14 @@ class RidesByStatusPage extends StatelessWidget {
     );
   }
 
+  // ─────────────────────────────
+  // EDIT RIDE DIALOG (ALL FIELDS + TARIF)
+  // ─────────────────────────────
   void _showEditRideDialog(
-      BuildContext context, String rideId, Map<String, dynamic> data) {
+    BuildContext context,
+    String rideId,
+    Map<String, dynamic> data,
+  ) {
     final passenger = TextEditingController(text: data["passengerName"] ?? "");
     final phone = TextEditingController(text: data["passengerPhone"] ?? "");
     final pickup = TextEditingController(text: data["pickupLocation"] ?? "");
@@ -164,6 +200,9 @@ class RidesByStatusPage extends StatelessWidget {
     final persons = TextEditingController(text: data["personsCount"] ?? "");
     final bags = TextEditingController(text: data["bagsCount"] ?? "");
     final others = TextEditingController(text: data["otherNotes"] ?? "");
+
+    // ✅ NEW
+    final tarif = TextEditingController(text: data["tarif"] ?? "");
 
     DateTime? pickedDateTime;
     final Timestamp? ts = data["pickupDateTimeUtc"];
@@ -250,6 +289,13 @@ class RidesByStatusPage extends StatelessWidget {
                       decoration:
                           const InputDecoration(labelText: "Nombre de bagages"),
                     ),
+
+                    // ✅ TARIF EDIT
+                    TextField(
+                      controller: tarif,
+                      decoration: const InputDecoration(labelText: "Tarif"),
+                    ),
+
                     TextField(
                       controller: others,
                       decoration: const InputDecoration(labelText: "Autres"),
@@ -276,6 +322,10 @@ class RidesByStatusPage extends StatelessWidget {
                       "personsCount": persons.text.trim(),
                       "bagsCount": bags.text.trim(),
                       "otherNotes": others.text.trim(),
+
+                      // ✅ NEW
+                      "tarif": tarif.text.trim(),
+
                       if (pickedDateTime != null)
                         "pickupDateTimeUtc": pickedDateTime,
                       if (pickedDateTime != null)

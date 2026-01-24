@@ -76,7 +76,7 @@ class DriverPage extends StatelessWidget {
         .showSnackBar(const SnackBar(content: Text("Course retirée")));
   }
 
-  // ✅ One block of copyable text for a ride (multi-line selectable)
+  // ✅ copy block (multi-line selectable)
   String _rideCopyBlock(Map<String, dynamic> data) {
     return "Date & Heure : ${data["pickupDateTimeText"] ?? "-"}\n"
         "Client : ${data["passengerName"] ?? "-"}\n"
@@ -86,6 +86,7 @@ class DriverPage extends StatelessWidget {
         "Numéro de vol : ${data["flightNumber"] ?? "-"}\n"
         "Nombre de personnes : ${data["personsCount"] ?? "-"}\n"
         "Nombre de bagages : ${data["bagsCount"] ?? "-"}\n"
+        "Tarif : ${data["tarif"] ?? "-"}\n"
         "Autres notes : ${data["otherNotes"] ?? "-"}\n"
         "Statut : ${data["status"] ?? "-"}";
   }
@@ -197,11 +198,9 @@ class DriverPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ✅ ONE selectable block: driver can select multiple lines
             SelectableText(
               _rideCopyBlock(data),
-              toolbarOptions:
-                  const ToolbarOptions(copy: true, selectAll: true),
+              toolbarOptions: const ToolbarOptions(copy: true, selectAll: true),
               style: const TextStyle(fontSize: 14),
             ),
 
