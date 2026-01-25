@@ -6,9 +6,11 @@ class AssignedRidesPage extends StatelessWidget {
   const AssignedRidesPage({Key? key}) : super(key: key);
 
   final String statusAssigned = "assigné";
+  final String statusStarted = "démarré";
+  final String statusCompleted = "terminé";
   final String statusUnassigned = "non assigné";
 
-  /// ✅ Safely resolve pickup date for correct sorting (new + old rides)
+  /// ✅ Normalize pickup datetime for sorting + comparisons
   DateTime? _getPickupDateTime(Map<String, dynamic> data) {
     final raw = data["pickupDateTimeUtc"];
 
@@ -24,6 +26,18 @@ class AssignedRidesPage extends StatelessWidget {
       }
     }
     return null;
+  }
+
+  /// ✅ Upcoming means: status == assigné AND pickupDateTime >= now
+  bool _isUpcomingAssignedRide(Map<String, dynamic> data) {
+    final String st = (data["status"] ?? "").toString();
+    if (st != statusAssigned) return false;
+
+    final DateTime? dt = _getPickupDateTime(data);
+    if (dt == null) return false;
+
+    final now = DateTime.now();
+    return dt.isAfter(now) || dt.isAtSameMomentAs(now);
   }
 
   String _rideCopyBlock(Map<String, dynamic> data, String driverLine) {
@@ -68,10 +82,10 @@ class AssignedRidesPage extends StatelessWidget {
             final bTime = _getPickupDateTime(bData);
 
             if (aTime == null && bTime == null) return 0;
-            if (aTime == null) return 1; // nulls go bottom
+            if (aTime == null) return 1;
             if (bTime == null) return -1;
 
-            return aTime.compareTo(bTime); // ✅ ASC
+            return aTime.compareTo(bTime);
           });
 
           return ListView.builder(
@@ -83,7 +97,12 @@ class AssignedRidesPage extends StatelessWidget {
               final String status = (data["status"] ?? "").toString();
               final String? driverId = data["assignedDriverId"];
 
-              final bool canModify = status == statusAssigned;
+              final bool isUpcomingAssigned = _isUpcomingAssignedRide(data);
+
+              /// ✅ Only allow "remove/reassign" if it's upcoming + assigné
+              final bool canModifyDriver = isUpcomingAssigned;
+
+              /// ✅ Admin can assign if ride is non assigné
               final bool canAssign = status == statusUnassigned;
 
               return Card(
@@ -94,7 +113,7 @@ class AssignedRidesPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      /// ✅ ONE selectable block (multi-line copy)
+                      /// ✅ One block selectable (multi-line copy)
                       if (driverId == null)
                         SelectableText(
                           _rideCopyBlock(data, "Chauffeur : Non assigné"),
@@ -141,13 +160,20 @@ class AssignedRidesPage extends StatelessWidget {
                               child: Text("Modifier la course"),
                             ));
 
-                            if (canModify) {
+                            /// ✅ Only upcoming rides can be reassigned/removed
+                            if (canModifyDriver) {
                               items.add(const PopupMenuItem(
                                 value: "remove",
                                 child: Text("Retirer chauffeur"),
                               ));
+
+                              items.add(const PopupMenuItem(
+                                value: "reassign",
+                                child: Text("Réassigner chauffeur"),
+                              ));
                             }
 
+                            /// ✅ Still allow assigning if unassigned
                             if (canAssign) {
                               items.add(const PopupMenuItem(
                                 value: "assign",
@@ -177,7 +203,7 @@ class AssignedRidesPage extends StatelessWidget {
                               });
                             }
 
-                            if (value == "assign") {
+                            if (value == "assign" || value == "reassign") {
                               _showDriverPicker(context, ride.id);
                             }
 

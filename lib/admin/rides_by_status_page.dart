@@ -14,6 +14,9 @@ class RidesByStatusPage extends StatelessWidget {
     required this.color,
   }) : super(key: key);
 
+  final String statusAssigned = "assigné";
+  final String statusUnassigned = "non assigné";
+
   /// ✅ Safely resolve pickup date for sorting (new + old rides)
   DateTime? _getPickupDateTime(Map<String, dynamic> data) {
     final raw = data["pickupDateTimeUtc"];
@@ -49,6 +52,8 @@ class RidesByStatusPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isUpcomingStatus = status == statusAssigned;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -67,8 +72,8 @@ class RidesByStatusPage extends StatelessWidget {
           DateTime now = DateTime.now();
           List<QueryDocumentSnapshot> rides = snapshot.data!.docs.toList();
 
-          // ✅ UPCOMING = assigné + date >= now
-          if (status == "assigné") {
+          // ✅ UPCOMING FILTER = assigné + pickupDateTime >= now
+          if (isUpcomingStatus) {
             rides = rides.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
               final DateTime? dt = _getPickupDateTime(data);
@@ -93,7 +98,7 @@ class RidesByStatusPage extends StatelessWidget {
             if (aTime == null) return 1;
             if (bTime == null) return -1;
 
-            return aTime.compareTo(bTime); // ✅ ASC
+            return aTime.compareTo(bTime);
           });
 
           return ListView.builder(
@@ -111,6 +116,7 @@ class RidesByStatusPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      /// ✅ Multi-line selectable details
                       if (driverId == null)
                         SelectableText(
                           _rideCopyBlock(data, "Chauffeur : Non assigné"),
@@ -149,16 +155,34 @@ class RidesByStatusPage extends StatelessWidget {
                       Align(
                         alignment: Alignment.centerRight,
                         child: PopupMenuButton<String>(
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
+                          itemBuilder: (_) {
+                            final items = <PopupMenuEntry<String>>[];
+
+                            items.add(const PopupMenuItem(
                               value: "edit",
                               child: Text("Modifier"),
-                            ),
-                            PopupMenuItem(
+                            ));
+
+                            // ✅ ONLY UPCOMING: allow reassign/remove
+                            if (isUpcomingStatus) {
+                              items.add(const PopupMenuItem(
+                                value: "reassign",
+                                child: Text("Réassigner chauffeur"),
+                              ));
+
+                              items.add(const PopupMenuItem(
+                                value: "remove_driver",
+                                child: Text("Retirer chauffeur"),
+                              ));
+                            }
+
+                            items.add(const PopupMenuItem(
                               value: "delete",
                               child: Text("Supprimer"),
-                            ),
-                          ],
+                            ));
+
+                            return items;
+                          },
                           onSelected: (val) async {
                             if (val == "delete") {
                               await FirebaseFirestore.instance
@@ -169,6 +193,22 @@ class RidesByStatusPage extends StatelessWidget {
 
                             if (val == "edit") {
                               _showEditRideDialog(context, ride.id, data);
+                            }
+
+                            // ✅ UPCOMING only
+                            if (val == "reassign") {
+                              _showDriverPicker(context, ride.id);
+                            }
+
+                            // ✅ UPCOMING only
+                            if (val == "remove_driver") {
+                              await FirebaseFirestore.instance
+                                  .collection("rides")
+                                  .doc(ride.id)
+                                  .update({
+                                "assignedDriverId": null,
+                                "status": statusUnassigned,
+                              });
                             }
                           },
                         ),
@@ -201,7 +241,6 @@ class RidesByStatusPage extends StatelessWidget {
     final bags = TextEditingController(text: data["bagsCount"] ?? "");
     final others = TextEditingController(text: data["otherNotes"] ?? "");
 
-    // ✅ NEW
     final tarif = TextEditingController(text: data["tarif"] ?? "");
 
     DateTime? pickedDateTime;
@@ -289,13 +328,10 @@ class RidesByStatusPage extends StatelessWidget {
                       decoration:
                           const InputDecoration(labelText: "Nombre de bagages"),
                     ),
-
-                    // ✅ TARIF EDIT
                     TextField(
                       controller: tarif,
                       decoration: const InputDecoration(labelText: "Tarif"),
                     ),
-
                     TextField(
                       controller: others,
                       decoration: const InputDecoration(labelText: "Autres"),
@@ -322,10 +358,7 @@ class RidesByStatusPage extends StatelessWidget {
                       "personsCount": persons.text.trim(),
                       "bagsCount": bags.text.trim(),
                       "otherNotes": others.text.trim(),
-
-                      // ✅ NEW
                       "tarif": tarif.text.trim(),
-
                       if (pickedDateTime != null)
                         "pickupDateTimeUtc": pickedDateTime,
                       if (pickedDateTime != null)
@@ -338,6 +371,57 @@ class RidesByStatusPage extends StatelessWidget {
                   child: const Text("Enregistrer"),
                 ),
               ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ─────────────────────────────
+  // DRIVER PICKER (Reassign)
+  // ─────────────────────────────
+  void _showDriverPicker(BuildContext context, String rideId) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection("users")
+              .where("role", isEqualTo: "driver")
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final drivers = snapshot.data!.docs;
+
+            if (drivers.isEmpty) {
+              return const Center(child: Text("Aucun chauffeur"));
+            }
+
+            return ListView(
+              children: drivers.map((driver) {
+                final name = driver["name"] ?? "Sans nom";
+
+                return ListTile(
+                  leading: const Icon(Icons.person),
+                  title: Text(name.toString()),
+                  onTap: () async {
+                    await FirebaseFirestore.instance
+                        .collection("rides")
+                        .doc(rideId)
+                        .update({
+                      "assignedDriverId": driver.id,
+                      "status": statusAssigned,
+                      "assignedAt": FieldValue.serverTimestamp(),
+                    });
+
+                    Navigator.pop(context);
+                  },
+                );
+              }).toList(),
             );
           },
         );
